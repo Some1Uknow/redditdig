@@ -1,2 +1,9 @@
 @import "tailwindcss";
 
+@plugin '@tailwindcss/typography';
+@plugin 'tailwind-scrollbar';
+
+@theme {
+  --font-inter: "InterVariable", ui-sans-serif, system-ui, sans-serif,
+    "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+}
