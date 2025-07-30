@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import InputForm from './InputForm';
+import SourceCard from './SourceCard';
 
 function ChatInterface({ messages, isLoading, input, setInput, handleSubmit }) {
   return (
@@ -14,7 +15,7 @@ function ChatInterface({ messages, isLoading, input, setInput, handleSubmit }) {
                 {message.role === "user" && (
                   <div className="flex justify-end">
                     <div className="bg-orange-500 text-white px-4 py-2 rounded-lg max-w-xl">
-                      <ReactMarkdown >
+                      <ReactMarkdown>
                         {message.content}
                       </ReactMarkdown>
                     </div>
@@ -23,23 +24,47 @@ function ChatInterface({ messages, isLoading, input, setInput, handleSubmit }) {
 
                 {/* Assistant Message */}
                 {message.role === "assistant" && (
-                  <div className="flex justify-start">
-                    <div className="bg-gray-100 text-gray-800 px-4 py-2 rounded-lg max-w-2xl">
-                      <ReactMarkdown >
-                        {message.summary}
-                      </ReactMarkdown>
+                  <div className="flex justify-start items-start space-x-3">
+                    {/* Reddit Dig Avatar */}
+                    <img 
+                      src="/redditDig.png" 
+                      alt="Reddit Dig" 
+                      className="w-8 h-8 rounded-full mt-2"
+                    />
+                    
+                    <div className="w-4/5">
+                      {/* Reddit Posts Slider */}
                       {message.sources && message.sources.length > 0 && (
-                        <div className="pt-2 mt-2 text-sm text-gray-600">
-                          <p className="font-semibold mb-1">Sources:</p>
-                          <div className="flex flex-wrap gap-2">
+                        <div className="mb-6 pb-4">
+                          <div className="flex overflow-x-auto space-x-4 pb-2 scrollbar-thin">
                             {message.sources.map((source, srcIndex) => (
-                              <a key={srcIndex} href={source.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
-                                {source.title}
-                              </a>
+                              <div key={srcIndex} className="flex-shrink-0">
+                                <SourceCard post={source} />
+                              </div>
                             ))}
                           </div>
                         </div>
                       )}
+                      
+                      {/* Assistant Text Content */}
+                      <div className="leading-relaxed text-gray-700">
+                        <ReactMarkdown
+                          components={{
+                            a: ({ href, children }) => (
+                              <a 
+                                href={href} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="text-blue-600 underline hover:text-blue-800"
+                              >
+                                {children}
+                              </a>
+                            )
+                          }}
+                        >
+                          {message.summary}
+                        </ReactMarkdown>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -47,8 +72,13 @@ function ChatInterface({ messages, isLoading, input, setInput, handleSubmit }) {
             ))}
 
             {isLoading && (
-              <div className="flex justify-start">
-                <div className="bg-gray-100 text-gray-800 px-4 py-2 rounded-lg max-w-2xl">
+              <div className="flex justify-start items-start space-x-3">
+                <img 
+                  src="/redditDig.png" 
+                  alt="Reddit Dig" 
+                  className="w-8 h-8 rounded-full mt-2"
+                />
+                <div className="w-4/5 text-gray-700 p-4 rounded-lg bg-gray-50">
                   <p className="text-sm leading-relaxed animate-pulse">Thinking...</p>
                 </div>
               </div>
@@ -58,7 +88,7 @@ function ChatInterface({ messages, isLoading, input, setInput, handleSubmit }) {
       </main>
 
       {/* Fixed Input Form at the bottom */}
-      <div className="sticky bottom-0 bg-white py-4 px-4 shadow-lg border-t border-gray-200">
+      <div className="sticky bottom-0 py-4 px-4">
         <div className="max-w-4xl mx-auto">
           <InputForm
             input={input}

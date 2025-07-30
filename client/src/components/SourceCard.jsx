@@ -1,6 +1,6 @@
-import React from 'react';
+import React from "react";
 import { MessageCircle, ArrowUp, ExternalLink } from "lucide-react";
-import RedditIcon from './RedditIcon';
+import RedditIcon from "./RedditIcon";
 
 function SourceCard({ post }) {
   const snippet =
