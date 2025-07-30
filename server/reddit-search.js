@@ -10,27 +10,55 @@ for (let i = 0; i < args.length; i += 2) {
   if (key && value) options[key] = value;
 }
 
-async function scrapeRedditPosts(keywords, limit = 10) {
+async function scrapeRedditPosts(keywords, limit = 5) { // Limiting to 5 for better performance and context quality
   try {
     console.error(`Scraping Reddit for: "${keywords}"...`);
+    // Step 1: Find the most relevant posts from the search page
     const searchUrl = `https://www.reddit.com/search.json`;
-    const response = await axios.get(searchUrl, {
-      params: { q: keywords, limit },
-      headers: { 'User-Agent': 'Reddit-Summarizer-App/1.0' },
+    const searchResponse = await axios.get(searchUrl, {
+      params: { q: keywords, limit, sort: 'relevance' },
+      headers: { 'User-Agent': 'Reddit-Insight-App/1.1' },
     });
 
-    const posts = response.data.data.children;
-    return posts.map(post => ({
-      id: post.data.id,
-      title: post.data.title,
-      author: post.data.author,
-      subreddit: post.data.subreddit,
-      score: post.data.score,
-      num_comments: post.data.num_comments,
-      selftext: post.data.selftext,
-      url: `https://www.reddit.com${post.data.permalink}`,
-      created_utc: post.data.created_utc,
-    }));
+    const initialPosts = searchResponse.data.data.children;
+
+    // Step 2: Fetch the full content for each post in parallel
+    const detailedPostPromises = initialPosts.map(post =>
+      axios.get(`https://www.reddit.com${post.data.permalink}.json`, {
+        headers: { 'User-Agent': 'Reddit-Insight-App/1.1' },
+      })
+    );
+
+    const detailedPostResponses = await Promise.all(detailedPostPromises);
+
+    // Step 3: Process the detailed data to extract full content
+    const posts = detailedPostResponses.map(response => {
+      const postData = response.data[0].data.children[0].data;
+      const commentsData = response.data[1].data.children;
+
+      // Extract the top 3 comments (if they exist)
+      const topComments = commentsData
+        .slice(0, 3)
+        .map((comment, i) => `Comment ${i + 1}: ${comment.data.body}`)
+        .join('\n');
+
+      // Combine the post body and top comments into one context field
+      const fullContent = `${postData.selftext || 'No post body.'}\n\nTop Comments:\n${topComments || 'No comments.'}`;
+
+      return {
+        id: postData.id,
+        title: postData.title,
+        author: postData.author,
+        subreddit: postData.subreddit,
+        score: postData.score,
+        num_comments: postData.num_comments,
+        selftext: postData.selftext,
+        url: `https://www.reddit.com${postData.permalink}`,
+        fullContent: fullContent, // The new, rich context field
+      };
+    });
+
+    return posts;
   } catch (error) {
     console.error('Scraping Error:', error.message);
     return [];
@@ -45,7 +73,6 @@ async function main() {
   }
 
   const results = await scrapeRedditPosts(keywords, limit);
-  // This is the only console.log that prints the final valid JSON to standard output.
   console.log(JSON.stringify({ posts: results }));
 }
 

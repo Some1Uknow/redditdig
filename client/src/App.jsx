@@ -1,9 +1,15 @@
-
+import { useState } from "react";
+import ReactMarkdown from "react-markdown";
 // Reusable component to display a single source post
 function PostCard({ post, index }) {
   return (
     <div className="bg-white rounded-lg p-3 border border-gray-200 hover:shadow-md transition-shadow">
-      <a href={post.url} target="_blank" rel="noopener noreferrer" className="block group">
+      <a
+        href={post.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="block group"
+      >
         <h3 className="font-medium text-blue-600 group-hover:text-blue-800 text-sm">
           {post.title}
         </h3>
@@ -16,7 +22,7 @@ function PostCard({ post, index }) {
 }
 
 export default function App() {
-  const [input, setInput] = useState('');
+  const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [messages, setMessages] = useState([]);
 
@@ -24,34 +30,36 @@ export default function App() {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
 
-    const userMessage = { role: 'user', content: input };
-    setMessages(prev => [...prev, userMessage]);
+    const userMessage = { role: "user", content: input };
+    setMessages((prev) => [...prev, userMessage]);
     setIsLoading(true);
-    setInput('');
+    setInput("");
 
     try {
-      const response = await fetch('http://localhost:3001/api/summarize', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetch("http://localhost:3001/api/summarize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: [userMessage] }), // Send the user message for context
       });
 
       if (!response.ok) {
-        throw new Error('Network response was not ok');
+        throw new Error("Network response was not ok");
       }
 
       const data = await response.json();
       const assistantMessage = {
-        role: 'assistant',
+        role: "assistant",
         summary: data.summary,
         sources: data.sources,
       };
-      setMessages(prev => [...prev, assistantMessage]);
-
+      setMessages((prev) => [...prev, assistantMessage]);
     } catch (error) {
-      console.error('Fetch error:', error);
-      const errorMessage = { role: 'assistant', summary: 'Sorry, I couldn\'t get a response. Please try again.' };
-      setMessages(prev => [...prev, errorMessage]);
+      console.error("Fetch error:", error);
+      const errorMessage = {
+        role: "assistant",
+        summary: "Sorry, I couldn't get a response. Please try again.",
+      };
+      setMessages((prev) => [...prev, errorMessage]);
     } finally {
       setIsLoading(false);
     }
@@ -60,23 +68,27 @@ export default function App() {
   return (
     <div className="flex flex-col h-screen bg-gray-100 font-sans">
       <header className="bg-white border-b border-gray-200 p-4">
-        <h1 className="text-xl font-bold text-gray-800">Reddit Insight AI (MVP)</h1>
+        <h1 className="text-xl font-bold text-gray-800">
+          Reddit Insight AI (MVP)
+        </h1>
       </header>
 
       <main className="flex-1 overflow-y-auto p-4">
         <div className="max-w-2xl mx-auto">
           {messages.map((m, index) => (
             <div key={index} className="mb-6">
-              {m.role === 'user' && (
+              {m.role === "user" && (
                 <div className="flex justify-end">
                   <div className="bg-blue-500 text-white rounded-lg px-4 py-2 max-w-lg">
                     {m.content}
                   </div>
                 </div>
               )}
-              {m.role === 'assistant' && (
+              {m.role === "assistant" && (
                 <div className="bg-white rounded-lg p-4 shadow-md border border-gray-200">
-                  <p className="text-gray-800 leading-relaxed">{m.summary}</p>
+                  <div className="text-gray-800 leading-relaxed prose prose-sm max-w-none">
+                    <ReactMarkdown>{m.summary}</ReactMarkdown>
+                  </div>
                   {m.sources && m.sources.length > 0 && (
                     <div className="mt-4 pt-4 border-t">
                       <h3 className="text-sm font-semibold mb-2">Sources:</h3>
@@ -119,7 +131,9 @@ export default function App() {
               disabled={isLoading || !input.trim()}
               className="absolute right-2 top-1/2 -translate-y-1/2 bg-blue-500 text-white rounded-full p-2 hover:bg-blue-600 disabled:bg-gray-300"
             >
-              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M3.105 2.289a.75.75 0 00-.826.95l1.414 4.925A1.5 1.5 0 005.135 9.25h6.115a.75.75 0 010 1.5H5.135a1.5 1.5 0 00-1.442 1.086L2.279 16.76a.75.75 0 00.95.826l14.25-4.25a.75.75 0 000-1.352L3.105 2.289z"></path></svg>
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M3.105 2.289a.75.75 0 00-.826.95l1.414 4.925A1.5 1.5 0 005.135 9.25h6.115a.75.75 0 010 1.5H5.135a1.5 1.5 0 00-1.442 1.086L2.279 16.76a.75.75 0 00.95.826l14.25-4.25a.75.75 0 000-1.352L3.105 2.289z"></path>
+              </svg>
             </button>
           </form>
         </div>
