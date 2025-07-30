@@ -18,7 +18,7 @@ jspm_packages/
 .env
 
 # TypeScript build artifacts
-*.js
+
 *.d.ts
 
 # Compiled output
