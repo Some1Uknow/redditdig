@@ -139,7 +139,7 @@ ${post.fullContent}`
     Provide your detailed analysis now:`;
 
     const { text } = await generateText({
-      model: mistral("ministral-8b-2410"),
+      model: mistral("ministral-8b-latest"),
       prompt: prompt,
     });
 
