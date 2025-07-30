@@ -11,29 +11,54 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 
+async function normalizeWithMistral(rawQuery) {
+  const prompt = `Rewrite the following user search query into a concise, keyword-only format suitable for Reddit search.
+- Remove all filler words and question structure.
+- Keep only essential nouns and modifiers.
+- Do NOT output a sentence.
+- Return lowercase, space-separated keywords only.`;
+
+  const { text: normalized } = await generateText({
+    model: mistral("mistral-small-latest"),
+    prompt: `${prompt} + \n Query - ${rawQuery}`,
+  });
+
+  // fallback if the model gives you garbage
+  if (!normalized || normalized.split(/\s+/).length < 2) {
+    return rawQuery
+      .toLowerCase()
+      .replace(/[^\w\s]/g, "")
+      .split(/\s+/)
+      .filter((w) => w.length > 2)
+      .join(" ");
+  }
+
+  return normalized.trim();
+}
+
 async function scrapeRedditPosts(keywords, limit = 5) {
   try {
     console.log(`Scraping Reddit for: "${keywords}"...`);
     // Step 1: Find the most relevant posts from the search page
     const searchUrl = `https://www.reddit.com/search.json`;
     const searchResponse = await axios.get(searchUrl, {
-      params: { q: keywords, limit, sort: 'relevance' },
-      headers: { 'User-Agent': 'Reddit-Insight-App/1.1' },
+      params: { q: keywords, limit, sort: "relevance" },
+      headers: { "User-Agent": "Reddit-Insight-App/1.1" },
     });
 
     const initialPosts = searchResponse.data.data.children;
 
     // Step 2: Fetch the full content for each post in parallel
-    const detailedPostPromises = initialPosts.map(post =>
+    const detailedPostPromises = initialPosts.map((post) =>
       axios.get(`https://www.reddit.com${post.data.permalink}.json`, {
-        headers: { 'User-Agent': 'Reddit-Insight-App/1.1' },
+        headers: { "User-Agent": "Reddit-Insight-App/1.1" },
       })
     );
 
     const detailedPostResponses = await Promise.all(detailedPostPromises);
 
     // Step 3: Process the detailed data to extract full content
-    const posts = detailedPostResponses.map(response => {
+    const posts = detailedPostResponses.map((response) => {
       const postData = response.data[0].data.children[0].data;
       const commentsData = response.data[1].data.children;
 
@@ -41,10 +66,12 @@ async function scrapeRedditPosts(keywords, limit = 5) {
       const topComments = commentsData
         .slice(0, 3)
         .map((comment, i) => `Comment ${i + 1}: ${comment.data.body}`)
-        .join('\n');
+        .join("\n");
 
       // Combine the post body and top comments into one context field
-      const fullContent = `${postData.selftext || 'No post body.'}\n\nTop Comments:\n${topComments || 'No comments.'}`;
+      const fullContent = `${
+        postData.selftext || "No post body."
+      }\n\nTop Comments:\n${topComments || "No comments."}`;
 
       return {
         id: postData.id,
@@ -61,7 +88,7 @@ async function scrapeRedditPosts(keywords, limit = 5) {
 
     return posts;
   } catch (error) {
-    console.error('Scraping Error:', error.message);
+    console.error("Scraping Error:", error.message);
     return [];
   }
 }
@@ -69,14 +96,19 @@ async function scrapeRedditPosts(keywords, limit = 5) {
 app.post("/api/summarize", async (req, res) => {
   const { messages } = req.body;
   const lastUserMessage = messages[messages.length - 1];
-  const keywords = lastUserMessage?.content;
+  const rawQuery = lastUserMessage?.content;
 
-  if (!keywords) {
+  if (!rawQuery) {
     return res.status(400).json({ error: "No query provided" });
   }
 
   try {
-    const posts = await scrapeRedditPosts(keywords, 5);
+    // 1. Normalize the query via MistralAI
+    const normalizedQuery = await normalizeWithMistral(rawQuery);
+    console.log(`Raw: "${rawQuery}" → Normalized: "${normalizedQuery}"`);
+
+    // 2. Now scrape using the keyword-style query
+    const posts = await scrapeRedditPosts(normalizedQuery, 5);
 
     // --- THIS IS THE MAIN CHANGE ---
     // We now build the context using the new 'fullContent' field
