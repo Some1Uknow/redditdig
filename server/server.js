@@ -115,11 +115,12 @@ app.post("/api/summarize", async (req, res) => {
     const context = posts
       .map(
         (post, index) =>
-          `Source [${index + 1}]:\nSubreddit: r/${post.subreddit}\nTitle: ${
-            post.title
-          }\nContent and Top Comments:\n${post.fullContent} Post URL:\n${
-            post.url
-          }`
+          `Source [${index + 1}]:
+Subreddit: r/${post.subreddit}
+Title: ${post.title}
+URL: ${post.url}
+Content and Top Comments:
+${post.fullContent}`
       )
       .join("\n\n---\n\n");
 
@@ -129,6 +130,8 @@ app.post("/api/summarize", async (req, res) => {
     1.  Start with a direct, insightful summary paragraph that captures the main themes and sentiments.
     2.  Follow with a bulleted list of the most important specific points, findings, or opinions discussed.
     3.  You **must** cite your information using the format [Source X] at the end of each point.
+    4.  Ensure all URLs are properly formatted and clickable, post should be in markdown format strictly.
+
     
     Here is the research material:
     ${context}

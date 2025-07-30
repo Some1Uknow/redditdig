@@ -8,7 +8,7 @@ function SourceCard({ post }) {
     (post.selftext?.length > 120 ? "..." : "");
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-4 min-w-[320px] max-w-[320px] flex-shrink-0 shadow-sm hover:shadow-md transition-all duration-200 hover:border-orange-200">
+    <div className="bg-white border border-gray-200 rounded-xl p-3 min-w-[280px] max-w-[280px] flex-shrink-0 shadow-sm hover:shadow-md transition-all duration-200 hover:border-orange-200 h-full">
       <a
         href={post.url}
         target="_blank"
@@ -17,36 +17,36 @@ function SourceCard({ post }) {
       >
         <div className="flex flex-col h-full">
           {/* Header with Reddit icon and subreddit */}
-          <div className="flex items-center gap-2 mb-3">
-            <div className="flex items-center gap-2 px-2 py-1 bg-orange-50 rounded-full">
-              <RedditIcon className="w-3 h-3 text-orange-600" />
+          <div className="flex items-center gap-1 mb-2">
+            <div className="flex items-center gap-1 px-1.5 py-0.5 bg-orange-50 rounded-full">
+              <RedditIcon className="w-2.5 h-2.5 text-orange-600" />
               <span className="text-xs font-medium text-orange-700">
                 r/{post.subreddit}
               </span>
             </div>
-            <ExternalLink className="w-3 h-3 text-gray-400 ml-auto" />
+            <ExternalLink className="w-2.5 h-2.5 text-gray-400 ml-auto" />
           </div>
 
           {/* Title */}
-          <h3 className="text-sm font-semibold text-gray-900 mb-3 leading-5 line-clamp-3">
+          <h3 className="text-sm font-semibold text-gray-900 mb-2 leading-tight line-clamp-2">
             {post.title}
           </h3>
 
           {/* Content snippet */}
           {snippet && (
-            <p className="text-xs text-gray-600 leading-relaxed mb-4 flex-grow line-clamp-4">
+            <p className="text-xs text-gray-600 leading-snug mb-2 flex-grow line-clamp-3">
               {snippet}
             </p>
           )}
 
           {/* Footer stats */}
-          <div className="flex items-center gap-4 text-xs text-gray-500 border-t border-gray-100 pt-3 mt-auto">
-            <div className="flex items-center gap-1">
-              <ArrowUp className="w-3 h-3" />
+          <div className="flex items-center gap-3 text-xs text-gray-500 border-t border-gray-100 pt-2 mt-auto">
+            <div className="flex items-center gap-0.5">
+              <ArrowUp className="w-2.5 h-2.5" />
               <span>{post.score}</span>
             </div>
-            <div className="flex items-center gap-1">
-              <MessageCircle className="w-3 h-3" />
+            <div className="flex items-center gap-0.5">
+              <MessageCircle className="w-2.5 h-2.5" />
               <span>{post.num_comments}</span>
             </div>
           </div>

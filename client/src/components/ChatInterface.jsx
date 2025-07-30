@@ -1,7 +1,7 @@
-import React from 'react';
-import ReactMarkdown from 'react-markdown';
-import InputForm from './InputForm';
-import SourceCard from './SourceCard';
+import rehypeExternalLinks from 'rehype-external-links'
+import ReactMarkdown from "react-markdown";
+import InputForm from "./InputForm";
+import SourceCard from "./SourceCard";
 
 function ChatInterface({ messages, isLoading, input, setInput, handleSubmit }) {
   return (
@@ -15,7 +15,11 @@ function ChatInterface({ messages, isLoading, input, setInput, handleSubmit }) {
                 {message.role === "user" && (
                   <div className="flex justify-end">
                     <div className="bg-orange-500 text-white px-4 py-2 rounded-lg max-w-xl">
-                      <ReactMarkdown>
+                      <ReactMarkdown
+                        rehypePlugins={[
+                          [rehypeExternalLinks, { target: "_blank" }],
+                        ]}
+                      >
                         {message.content}
                       </ReactMarkdown>
                     </div>
@@ -26,40 +30,43 @@ function ChatInterface({ messages, isLoading, input, setInput, handleSubmit }) {
                 {message.role === "assistant" && (
                   <div className="flex justify-start items-start space-x-3">
                     {/* Reddit Dig Avatar */}
-                    <img 
-                      src="/redditDig.png" 
-                      alt="Reddit Dig" 
+                    <img
+                      src="/redditDig.png"
+                      alt="Reddit Dig"
                       className="w-8 h-8 rounded-full mt-2"
                     />
-                    
+
                     <div className="w-4/5">
                       {/* Reddit Posts Slider */}
                       {message.sources && message.sources.length > 0 && (
-                        <div className="mb-6 pb-4">
-                          <div className="flex overflow-x-auto space-x-4 pb-2 scrollbar-thin">
+                        <div className="mb-4 h-64">
+                          <div className="flex overflow-x-auto space-x-3 pb-2 scrollbar-thin h-full">
                             {message.sources.map((source, srcIndex) => (
-                              <div key={srcIndex} className="flex-shrink-0">
+                              <div
+                                key={srcIndex}
+                                className="flex-shrink-0 h-full"
+                              >
                                 <SourceCard post={source} />
                               </div>
                             ))}
                           </div>
                         </div>
                       )}
-                      
+
                       {/* Assistant Text Content */}
                       <div className="leading-relaxed text-gray-700">
                         <ReactMarkdown
                           components={{
                             a: ({ href, children }) => (
-                              <a 
-                                href={href} 
-                                target="_blank" 
+                              <a
+                                href={href}
+                                target="_blank"
                                 rel="noopener noreferrer"
                                 className="text-blue-600 underline hover:text-blue-800"
                               >
                                 {children}
                               </a>
-                            )
+                            ),
                           }}
                         >
                           {message.summary}
@@ -73,13 +80,15 @@ function ChatInterface({ messages, isLoading, input, setInput, handleSubmit }) {
 
             {isLoading && (
               <div className="flex justify-start items-start space-x-3">
-                <img 
-                  src="/redditDig.png" 
-                  alt="Reddit Dig" 
+                <img
+                  src="/redditDig.png"
+                  alt="Reddit Dig"
                   className="w-8 h-8 rounded-full mt-2"
                 />
                 <div className="w-4/5 text-gray-700 p-4 rounded-lg bg-gray-50">
-                  <p className="text-sm leading-relaxed animate-pulse">Thinking...</p>
+                  <p className="text-sm leading-relaxed animate-pulse">
+                    Thinking...
+                  </p>
                 </div>
               </div>
             )}
