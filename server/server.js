@@ -1,8 +1,7 @@
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
-const path = require("path");
-const { spawn } = require("child_process");
+const axios = require("axios");
 const { generateText } = require("ai");
 const { mistral } = require("@ai-sdk/mistral");
 
@@ -11,6 +10,61 @@ const PORT = process.env.PORT || 3001;
 
 app.use(cors());
 app.use(express.json());
+
+async function scrapeRedditPosts(keywords, limit = 5) {
+  try {
+    console.log(`Scraping Reddit for: "${keywords}"...`);
+    // Step 1: Find the most relevant posts from the search page
+    const searchUrl = `https://www.reddit.com/search.json`;
+    const searchResponse = await axios.get(searchUrl, {
+      params: { q: keywords, limit, sort: 'relevance' },
+      headers: { 'User-Agent': 'Reddit-Insight-App/1.1' },
+    });
+
+    const initialPosts = searchResponse.data.data.children;
+
+    // Step 2: Fetch the full content for each post in parallel
+    const detailedPostPromises = initialPosts.map(post =>
+      axios.get(`https://www.reddit.com${post.data.permalink}.json`, {
+        headers: { 'User-Agent': 'Reddit-Insight-App/1.1' },
+      })
+    );
+
+    const detailedPostResponses = await Promise.all(detailedPostPromises);
+
+    // Step 3: Process the detailed data to extract full content
+    const posts = detailedPostResponses.map(response => {
+      const postData = response.data[0].data.children[0].data;
+      const commentsData = response.data[1].data.children;
+
+      // Extract the top 3 comments (if they exist)
+      const topComments = commentsData
+        .slice(0, 3)
+        .map((comment, i) => `Comment ${i + 1}: ${comment.data.body}`)
+        .join('\n');
+
+      // Combine the post body and top comments into one context field
+      const fullContent = `${postData.selftext || 'No post body.'}\n\nTop Comments:\n${topComments || 'No comments.'}`;
+
+      return {
+        id: postData.id,
+        title: postData.title,
+        author: postData.author,
+        subreddit: postData.subreddit,
+        score: postData.score,
+        num_comments: postData.num_comments,
+        selftext: postData.selftext,
+        url: `https://www.reddit.com${postData.permalink}`,
+        fullContent: fullContent,
+      };
+    });
+
+    return posts;
+  } catch (error) {
+    console.error('Scraping Error:', error.message);
+    return [];
+  }
+}
 
 app.post("/api/summarize", async (req, res) => {
   const { messages } = req.body;
@@ -22,27 +76,7 @@ app.post("/api/summarize", async (req, res) => {
   }
 
   try {
-    const scraperPromise = new Promise((resolve, reject) => {
-      const args = ["--keywords", keywords, "--limit", "5"]; // Using limit 5 for better results
-      const process = spawn("node", [
-        path.join(__dirname, "reddit-search.js"),
-        ...args,
-      ]);
-      let stdout = "",
-        stderr = "";
-      process.stdout.on("data", (data) => (stdout += data));
-      process.stderr.on("data", (data) => (stderr += data));
-      process.on("close", (code) => {
-        if (code !== 0) return reject(new Error(`Scraper failed: ${stderr}`));
-        try {
-          resolve(JSON.parse(stdout));
-        } catch (e) {
-          reject(new Error("Failed to parse scraper JSON."));
-        }
-      });
-    });
-
-    const { posts } = await scraperPromise;
+    const posts = await scrapeRedditPosts(keywords, 5);
 
     // --- THIS IS THE MAIN CHANGE ---
     // We now build the context using the new 'fullContent' field
