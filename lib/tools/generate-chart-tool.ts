@@ -30,137 +30,188 @@ export const generateChartTool = tool({
     try {
       console.log(`📊 Generating ${chartType} chart: "${title}"`);
 
+      // Validate input data
+      if (!data) {
+        return {
+          success: false,
+          message: "No data provided for chart generation",
+          chartData: [],
+        };
+      }
+
+      // Initialize chart data
       let chartData: any[] = [];
 
-      // Handle different chart types and data structures
-      if (chartType === "pie") {
-        if (data.sentiments && data.sentiments.percentages) {
-          // Sentiment pie chart
-          chartData = [
-            {
-              name: "Positive",
-              value: data.sentiments.percentages.positive || 0,
-              count: data.sentiments.positive || 0,
-              color: "#4CAF50",
-            },
-            {
-              name: "Negative",
-              value: data.sentiments.percentages.negative || 0,
-              count: data.sentiments.negative || 0,
-              color: "#F44336",
-            },
-            {
-              name: "Neutral",
-              value: data.sentiments.percentages.neutral || 0,
-              count: data.sentiments.neutral || 0,
-              color: "#FFC107",
-            },
-          ].filter((item) => item.value > 0);
-        } else if (dataField && data[dataField]) {
-          // Custom pie chart from specified field
-          const fieldData = Array.isArray(data[dataField])
-            ? data[dataField]
-            : Object.entries(data[dataField]);
-          chartData = fieldData
-            .slice(0, maxItems)
-            .map((item: any, index: number) => ({
-              name: item.name || item[0] || `Item ${index + 1}`,
-              value: item.value || item.count || item[1] || 0,
-              color: generateColor(index),
-            }))
-            .filter((item: any) => item.value > 0);
+      // Handle raw analysis data (no preparation step needed)
+      // Ensure data has required structure
+      const processedData = { ...data };
+      
+      // Ensure sentiments have percentages
+      if (processedData.sentiments && processedData.sentiments.total > 0 && (!processedData.sentiments.percentages || Object.keys(processedData.sentiments.percentages).length === 0)) {
+        processedData.sentiments.percentages = {
+          positive: Math.round((processedData.sentiments.positive / processedData.sentiments.total) * 100),
+          negative: Math.round((processedData.sentiments.negative / processedData.sentiments.total) * 100),
+          neutral: Math.round((processedData.sentiments.neutral / processedData.sentiments.total) * 100)
+        };
+      }
+
+      // Handle different chart types with visualization-ready data
+      if (chartType === "bar" || chartType === "pie") {
+        // Enhanced data extraction to handle multiple data formats
+        let sourceData = null;
+        let dataType = "";
+
+        // Try to find opinion data
+        if (data.opinions && Array.isArray(data.opinions) && data.opinions.length > 0) {
+          sourceData = data.opinions;
+          dataType = "opinions";
+        } 
+        // Try to find sentiment data in various formats
+        else if (data.sentiments || (data.positive !== undefined || data.negative !== undefined || data.neutral !== undefined)) {
+          // Handle both nested and flat sentiment structures
+          const sentiments = data.sentiments || data;
+          const hasPercentages = sentiments.percentages && (sentiments.percentages.positive !== undefined || sentiments.percentages.negative !== undefined || sentiments.percentages.neutral !== undefined);
+          
+          sourceData = [
+            { name: "Positive", value: hasPercentages ? sentiments.percentages.positive : sentiments.positive || 0, count: sentiments.positive || 0 },
+            { name: "Negative", value: hasPercentages ? sentiments.percentages.negative : sentiments.negative || 0, count: sentiments.negative || 0 },
+            { name: "Neutral", value: hasPercentages ? sentiments.percentages.neutral : sentiments.neutral || 0, count: sentiments.neutral || 0 }
+          ];
+          dataType = "sentiments";
         }
-      } else if (chartType === "bar") {
-        if (data.opinions && Array.isArray(data.opinions)) {
-          // Opinion bar chart
-          chartData = data.opinions
-            .sort((a: any, b: any) => {
-              if (sortBy === "value") return (b.count || 0) - (a.count || 0);
-              if (sortBy === "name")
-                return (a.opinion || "").localeCompare(b.opinion || "");
-              return (b.count || 0) - (a.count || 0);
-            })
-            .slice(0, maxItems)
-            .map((op: any, index: number) => ({
-              name:
-                op.opinion && op.opinion.length > 30
-                  ? op.opinion.substring(0, 30) + "..."
-                  : op.opinion || "Unknown",
-              fullName: op.opinion || "Unknown",
-              value: op.count || 0,
-              confidence: op.confidence || 3,
-              color: generateColor(index),
-              examples: op.examples || [],
-            }))
-            .filter((item: any) => item.value > 0);
-        } else if (data.subredditAnalysis) {
-          // Subreddit comparison bar chart
-          chartData = Object.entries(data.subredditAnalysis)
-            .slice(0, maxItems)
-            .map(([subreddit, analysis]: [string, any], index: number) => ({
-              name: `r/${subreddit}`,
-              value: analysis.sentiments?.total || 0,
-              positive: analysis.sentiments?.positive || 0,
-              negative: analysis.sentiments?.negative || 0,
-              neutral: analysis.sentiments?.neutral || 0,
-              color: generateColor(index),
-            }))
-            .filter((item: any) => item.value > 0);
-        } else if (dataField && data[dataField]) {
-          // Custom bar chart from specified field
-          const fieldData = Array.isArray(data[dataField])
-            ? data[dataField]
-            : Object.entries(data[dataField]);
-          chartData = fieldData
-            .slice(0, maxItems)
-            .map((item: any, index: number) => ({
-              name: item.name || item[0] || `Item ${index + 1}`,
-              value: item.value || item.count || item[1] || 0,
-              color: generateColor(index),
-            }))
-            .filter((item: any) => item.value > 0);
+        // Try to find subreddit analysis data
+        else if (data.subredditAnalysis) {
+          sourceData = Object.entries(data.subredditAnalysis).map(([subreddit, analysis]: [string, any]) => ({
+            name: `r/${subreddit}`,
+            value: analysis.sentiments?.total || 0,
+            positive: analysis.sentiments?.positive || 0,
+            negative: analysis.sentiments?.negative || 0,
+            neutral: analysis.sentiments?.neutral || 0
+          }));
+          dataType = "subredditAnalysis";
+        }
+        // Try to use any other data field specified
+        else if (dataField && data[dataField]) {
+          sourceData = data[dataField];
+          dataType = dataField;
+        }
+        // Try to use the root data if it's an array
+        else if (Array.isArray(data) && data.length > 0) {
+          sourceData = data;
+          dataType = "array";
+        }
+
+        // If we found valid source data, process it
+        if (sourceData && sourceData.length > 0) {
+          // Filter out zero values
+          const validData = sourceData.filter((item: any) => (item.value || item.count || 0) > 0);
+          
+          if (validData.length > 0) {
+            // Sort the data
+            const sortedData = [...validData].sort((a: any, b: any) => {
+              if (sortBy === "value") return (b.value || b.count || 0) - (a.value || a.count || 0);
+              if (sortBy === "name") return (a.name || "").localeCompare(b.name || "");
+              return (b.value || b.count || 0) - (a.value || a.count || 0);
+            }).slice(0, maxItems);
+
+            // Generate chart data
+            chartData = sortedData.map((item: any, index: number) => {
+              // Calculate percentage if we have count data
+              const totalCount = sortedData.reduce((sum: number, i: any) => sum + (i.count || i.value || 0), 0);
+              const value = item.value !== undefined ? item.value : (item.count || 0);
+              const percentage = totalCount > 0 ? Math.round((value / totalCount) * 100) : 0;
+
+              // Base chart item
+              let chartItem: any = {
+                name: item.name || item.opinion || item.subreddit || `Item ${index + 1}`,
+                value: chartType === "pie" ? percentage : value,
+                color: generateColor(index)
+              };
+
+              // Add additional properties based on data type and chart type
+              if (dataType === "opinions") {
+                chartItem.fullName = item.opinion || "Unknown";
+                chartItem.confidence = item.confidence || 3;
+                chartItem.examples = item.examples || [];
+                chartItem.isEstimated = item.isEstimated || false;
+                if (chartType === "bar") {
+                  chartItem.percentage = percentage;
+                }
+              } else if (dataType === "sentiments") {
+                chartItem.count = item.count || 0;
+                if (chartType === "bar") {
+                  chartItem.percentage = percentage;
+                }
+              } else if (dataType === "subredditAnalysis") {
+                chartItem.value = value; // Keep actual count for bar charts
+                if (chartType === "pie") {
+                  chartItem.value = percentage; // Use percentage for pie charts
+                }
+                chartItem.positive = item.positive || 0;
+                chartItem.negative = item.negative || 0;
+                chartItem.neutral = item.neutral || 0;
+              }
+
+              return chartItem;
+            });
+          }
+        }
+
+        // If no chart data was generated, check for other data formats
+        if (chartData.length === 0) {
+          // Handle simple key-value objects (like the percentages object in the example)
+          if (data && typeof data === 'object' && !Array.isArray(data)) {
+            const entries = Object.entries(data).filter(([key, value]) => typeof value === 'number' && value > 0);
+            if (entries.length > 0) {
+              chartData = entries
+                .sort(([aKey, aValue], [bKey, bValue]) => {
+                  if (sortBy === "value") return (bValue as number) - (aValue as number);
+                  if (sortBy === "name") return aKey.localeCompare(bKey);
+                  return (bValue as number) - (aValue as number);
+                })
+                .slice(0, maxItems)
+                .map(([key, value], index) => {
+                  // Calculate percentage
+                  const total = entries.reduce((sum, [k, v]) => sum + (v as number), 0);
+                  const percentage = total > 0 ? Math.round(((value as number) / total) * 100) : 0;
+                  
+                  return {
+                    name: key.charAt(0).toUpperCase() + key.slice(1),
+                    value: chartType === "pie" ? percentage : (value as number),
+                    color: generateColor(index)
+                  };
+                });
+            }
+          }
+        }
+
+        // Final validation
+        if (chartData.length === 0) {
+          const chartTypeMsg = chartType === "bar" ? 
+            "No suitable data available for bar chart generation" : 
+            "No suitable data available for pie chart generation";
+          return {
+            success: false,
+            message: `${chartTypeMsg} (requires numeric data with positive values)`,
+            chartData: [],
+          };
         }
       } else if (chartType === "line") {
-        // Line chart for trends over time (if applicable)
-        if (data.trends && Array.isArray(data.trends)) {
+        // Line chart
+        if (data.trends && Array.isArray(data.trends) && data.trends.length > 0) {
           chartData = data.trends.map((trend: any, index: number) => ({
             name: trend.period || `Period ${index + 1}`,
             value: trend.value || trend.count || 0,
             color: generateColor(index),
           }));
         } else {
-          // Convert other data to line format
-          chartData = [
-            {
-              name: "Positive",
-              value: data.sentiments?.positive || 0,
-              color: "#4CAF50",
-            },
-            {
-              name: "Negative",
-              value: data.sentiments?.negative || 0,
-              color: "#F44336",
-            },
-            {
-              name: "Neutral",
-              value: data.sentiments?.neutral || 0,
-              color: "#FFC107",
-            },
-          ];
+          return {
+            success: false,
+            message: "No trend data available for line chart generation",
+            chartData: [],
+          };
         }
       }
-
-      // Sort the data if requested
-      if (sortBy === "value") {
-        chartData.sort((a: any, b: any) => (b.value || 0) - (a.value || 0));
-      } else if (sortBy === "name") {
-        chartData.sort((a: any, b: any) =>
-          (a.name || "").localeCompare(b.name || "")
-        );
-      }
-
-      // Limit to maxItems
-      chartData = chartData.slice(0, maxItems);
 
       // Generate additional metadata
       const totalValue = chartData.reduce(
@@ -185,6 +236,8 @@ export const generateChartTool = tool({
           totalValue,
           averageValue: Math.round(avgValue * 100) / 100,
           timestamp: new Date().toISOString(),
+          dataQuality: data.visualization?.dataQuality || "unknown",
+          modifications: data.visualization?.modifications || []
         },
       };
 

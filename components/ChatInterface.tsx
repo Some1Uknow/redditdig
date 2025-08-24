@@ -458,6 +458,15 @@ const ChartRenderer: React.FC<{ toolInvocation: any }> = ({ toolInvocation }) =>
 
   const { chartData, chartConfig } = result;
   
+  // Memoize the tooltip formatter to prevent recreation on every render
+  const tooltipFormatter = React.useCallback((value: any, name: string, props: any) => {
+    const entry = props.payload;
+    return [`${value} (${entry.percentage || 0}%)`, name];
+  }, []);
+  
+  // Create a stable key for the chart container to prevent unnecessary re-renders
+  const chartKey = `chart-${toolInvocation.toolCallId}-${chartConfig.type}`;
+  
   return (
     <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
       <div className="flex items-center space-x-2 mb-4">
@@ -466,7 +475,7 @@ const ChartRenderer: React.FC<{ toolInvocation: any }> = ({ toolInvocation }) =>
       </div>
       
       <div className="h-64 w-full">
-        <ResponsiveContainer width="100%" height="100%">
+        <ResponsiveContainer width="100%" height="100%" key={chartKey}>
           {chartConfig.type === 'pie' ? (
             <PieChart>
               <Pie
@@ -476,20 +485,20 @@ const ChartRenderer: React.FC<{ toolInvocation: any }> = ({ toolInvocation }) =>
                 cx="50%"
                 cy="50%"
                 outerRadius={80}
-                label
+                label={({ name, percentage }) => `${name} (${percentage}%)`}
               >
                 {chartData.map((entry: any, index: number) => (
                   <Cell key={`cell-${index}`} fill={entry.color || COLORS[index % COLORS.length]} />
                 ))}
               </Pie>
-              <Tooltip />
+              <Tooltip formatter={tooltipFormatter} />
               <Legend />
             </PieChart>
           ) : (
             <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
               <XAxis dataKey="name" />
               <YAxis />
-              <Tooltip />
+              <Tooltip formatter={tooltipFormatter} />
               <Legend />
               <Bar dataKey="value" fill="#8884d8" />
             </BarChart>

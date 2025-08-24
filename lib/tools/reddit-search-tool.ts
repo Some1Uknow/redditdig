@@ -40,8 +40,8 @@ export const redditSearchTool = tool({
     limit: z
       .number()
       .min(1)
-      .max(3)
-      .default(3)
+      .max(2)
+      .default(2)
       .describe("Number of posts to retrieve"),
   }),
   execute: async ({
@@ -224,9 +224,9 @@ export const redditSearchTool = tool({
           const postData = response.data[0]?.data?.children?.[0]?.data;
           const commentsData = response.data[1]?.data?.children || [];
           if (!postData) return null;
-          // Extract top comments
+          // Extract top comments - reduced from 5 to 3 and truncate long comments
           const topComments = commentsData
-            .slice(0, 5)
+            .slice(0, 3)
             .filter(
               (comment: any) =>
                 comment.data.body &&
@@ -236,13 +236,18 @@ export const redditSearchTool = tool({
             )
             .map((comment: any, i: number) => ({
               author: comment.data.author,
-              body: comment.data.body,
+              body: comment.data.body.length > 300 
+                ? comment.data.body.substring(0, 300) + "..."
+                : comment.data.body,
               score: comment.data.score,
               index: i + 1,
             }));
-          const fullContent = `${
-            postData.selftext || "No post body."
-          }\n\nTop Comments:\n${
+          // Truncate post content for token efficiency
+          const truncatedSelftext = postData.selftext && postData.selftext.length > 800
+            ? postData.selftext.substring(0, 800) + "..."
+            : postData.selftext || "No post body.";
+            
+          const fullContent = `${truncatedSelftext}\n\nTop Comments:\n${
             topComments.length > 0
               ? topComments
                   .map(

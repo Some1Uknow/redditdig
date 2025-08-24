@@ -16,58 +16,63 @@ const AnalysisSchema = z.object({
         count: z.number().describe("Number of times this opinion appeared"),
         examples: z
           .array(z.string())
-          .describe("Specific quotes or examples supporting this opinion"),
+          .describe("Specific quotes or examples supporting this opinion")
+          .optional(),
         confidence: z
           .number()
           .min(1)
           .max(5)
-          .describe("Confidence level (1-5) in this opinion analysis"),
+          .describe("Confidence level (1-5) in this opinion analysis")
+          .optional(),
       })
     )
     .describe("Key distinct opinions found in the Reddit data"),
   sentiments: z.object({
-    positive: z.number().describe("Count of positive posts/comments"),
-    negative: z.number().describe("Count of negative posts/comments"),
-    neutral: z.number().describe("Count of neutral posts/comments"),
-    total: z.number().describe("Total posts/comments analyzed"),
+    positive: z.number().describe("Count of positive posts/comments").optional(),
+    negative: z.number().describe("Count of negative posts/comments").optional(),
+    neutral: z.number().describe("Count of neutral posts/comments").optional(),
+    total: z.number().describe("Total posts/comments analyzed").optional(),
     percentages: z.object({
-      positive: z.number().describe("Percentage of positive sentiment"),
-      negative: z.number().describe("Percentage of negative sentiment"),
-      neutral: z.number().describe("Percentage of neutral sentiment"),
-    }),
-  }),
+      positive: z.number().describe("Percentage of positive sentiment").optional(),
+      negative: z.number().describe("Percentage of negative sentiment").optional(),
+      neutral: z.number().describe("Percentage of neutral sentiment").optional(),
+    }).optional(),
+  }).optional(),
   keyInsights: z
     .array(z.string())
-    .describe("Top 3-5 key insights from the analysis"),
-  biases: z.string().describe("Detected biases in the community discussions"),
+    .describe("Top 3-5 key insights from the analysis")
+    .optional(),
+  biases: z.string().describe("Detected biases in the community discussions").optional(),
   subredditAnalysis: z
     .record(
       z.object({
-        summary: z.string().describe("Summary of this subreddit's perspective"),
+        summary: z.string().describe("Summary of this subreddit's perspective").optional(),
         sentiments: z.object({
-          positive: z.number(),
-          negative: z.number(),
-          neutral: z.number(),
-          total: z.number(),
+          positive: z.number().optional(),
+          negative: z.number().optional(),
+          neutral: z.number().optional(),
+          total: z.number().optional(),
           percentages: z.object({
-            positive: z.number(),
-            negative: z.number(),
-            neutral: z.number(),
-          }),
-        }),
+            positive: z.number().optional(),
+            negative: z.number().optional(),
+            neutral: z.number().optional(),
+          }).optional(),
+        }).optional(),
         dominantOpinions: z.array(
           z.object({
-            opinion: z.string(),
+            opinion: z.string().optional(),
             strength: z
               .number()
               .min(1)
               .max(5)
-              .describe("How strongly this opinion is held (1-5)"),
+              .describe("How strongly this opinion is held (1-5)")
+              .optional(),
           })
-        ),
+        ).optional(),
       })
     )
-    .describe("Analysis broken down by subreddit communities"),
+    .describe("Analysis broken down by subreddit communities")
+    .optional(),
 });
 
 export const analyzeRedditDataTool = tool({
@@ -124,13 +129,16 @@ export const analyzeRedditDataTool = tool({
         };
       }
 
-      // Limit comments per post to 3 for prompt efficiency
+      // Restore full content for high-quality analysis
       const limitedPosts = posts.map((post: any) => ({
         ...post,
-        topComments: post.topComments ? post.topComments.slice(0, 3) : [],
+        // Remove content truncation for comprehensive analysis
+        selftext: post.selftext,
+        // Restore full comments for better context
+        topComments: post.topComments || [],
       }));
 
-      // If too many posts, batch them for analysis
+      // Increase batch size for more comprehensive analysis
       const batchSize = 8;
       const batches = [];
       for (let i = 0; i < limitedPosts.length; i += batchSize) {
@@ -170,13 +178,9 @@ ${commentsText}
             })
             .join("\n\n");
 
-          // Limit context size for API efficiency
+          // Restore full context for comprehensive analysis
           const maxContextLength = 12000;
-          const analysisContext =
-            context.length > maxContextLength
-              ? context.substring(0, maxContextLength) +
-                "\n\n[Content truncated for analysis efficiency]"
-              : context;
+          const analysisContext = context;
 
           console.log(
             `📊 Analyzing ${analysisContext.length} characters of Reddit content...`
@@ -241,10 +245,10 @@ Be specific, cite examples, and ensure opinions are substantial and distinct.`;
           });
           // Merge sentiments
           if (analysis.sentiments) {
-            allSentiments.positive += analysis.sentiments.positive;
-            allSentiments.negative += analysis.sentiments.negative;
-            allSentiments.neutral += analysis.sentiments.neutral;
-            allSentiments.total += analysis.sentiments.total;
+            allSentiments.positive += analysis.sentiments.positive || 0;
+            allSentiments.negative += analysis.sentiments.negative || 0;
+            allSentiments.neutral += analysis.sentiments.neutral || 0;
+            allSentiments.total += analysis.sentiments.total || 0;
           }
           // Merge subredditAnalysis
           if (analysis.subredditAnalysis) {
@@ -265,14 +269,16 @@ Be specific, cite examples, and ensure opinions are substantial and distinct.`;
                 ] as const;
                 for (const key of sentimentKeys) {
                   const k = key as keyof typeof prev.sentiments;
-                  if (k in prev.sentiments && k in subAnalysis.sentiments) {
+                  if (k in prev.sentiments && subAnalysis.sentiments && k in subAnalysis.sentiments) {
                     // Type assertions are safe here because keys are restricted above
                     (prev.sentiments as any)[k] += (
                       subAnalysis.sentiments as any
-                    )[k];
+                    )[k] || 0;
                   }
                 }
-                prev.dominantOpinions.push(...subAnalysis.dominantOpinions);
+                if (subAnalysis.dominantOpinions) {
+                  prev.dominantOpinions.push(...subAnalysis.dominantOpinions);
+                }
               }
             }
           }
@@ -286,146 +292,57 @@ Be specific, cite examples, and ensure opinions are substantial and distinct.`;
         }
       } catch (analysisError) {
         console.error(
-          "⚠️ Detailed batch analysis failed, creating fallback analysis..."
+          "⚠️ Detailed batch analysis failed"
         );
-        analysisSucceeded = false;
+        // Don't set analysisSucceeded = false, let the outer try/catch handle it
+        throw analysisError;
       }
 
-      if (analysisSucceeded) {
-        // Merge all batch results
-        const enhancedAnalysis = {
-          opinions: allOpinions,
-          sentiments: {
-            ...allSentiments,
-            percentages: {
-              positive: allSentiments.total
-                ? Math.round(
-                    (allSentiments.positive / allSentiments.total) * 100
-                  )
-                : 0,
-              negative: allSentiments.total
-                ? Math.round(
-                    (allSentiments.negative / allSentiments.total) * 100
-                  )
-                : 0,
-              neutral: allSentiments.total
-                ? Math.round(
-                    (allSentiments.neutral / allSentiments.total) * 100
-                  )
-                : 0,
-            },
+      // Merge all batch results
+      const enhancedAnalysis = {
+        opinions: allOpinions,
+        sentiments: {
+          ...allSentiments,
+          percentages: {
+            positive: allSentiments.total
+              ? Math.round((allSentiments.positive / allSentiments.total) * 100)
+              : 0,
+            negative: allSentiments.total
+              ? Math.round((allSentiments.negative / allSentiments.total) * 100)
+              : 0,
+            neutral: allSentiments.total
+              ? Math.round((allSentiments.neutral / allSentiments.total) * 100)
+              : 0,
           },
-          keyInsights: allKeyInsights,
-          biases: allBiases.join("\n"),
-          subredditAnalysis: allSubredditAnalysis,
-          metadata: {
-            postsAnalyzed: totalPostsAnalyzed,
-            subredditsIncluded: Array.from(allSubreddits),
-            totalScore,
-            totalComments,
-            analysisType,
-            focusArea: focusArea || null,
-            timestamp: new Date().toISOString(),
-          },
-        };
+        },
+        keyInsights: allKeyInsights,
+        biases: allBiases.join("\n"),
+        subredditAnalysis: allSubredditAnalysis,
+        metadata: {
+          postsAnalyzed: totalPostsAnalyzed,
+          subredditsIncluded: Array.from(allSubreddits),
+          totalScore,
+          totalComments,
+          analysisType,
+          focusArea: focusArea || null,
+          timestamp: new Date().toISOString(),
+        },
+      };
 
-        return {
-          success: true,
-          message: `Completed ${analysisType} analysis of ${totalPostsAnalyzed} Reddit posts (batched)`,
-          analysis: enhancedAnalysis,
-          rawData: {
-            posts: limitedPosts.map((p: any) => ({
-              id: p.id,
-              title: p.title,
-              subreddit: p.subreddit,
-              score: p.score,
-              comments: p.num_comments,
-            })),
-          },
-        };
-      } else {
-        // Fallback analysis
-        const subreddits = [
-          ...new Set(limitedPosts.map((p: any) => p.subreddit)),
-        ];
-        const totalScoreFallback = limitedPosts.reduce(
-          (sum: number, p: any) => sum + (p.score || 0),
-          0
-        );
-        const totalCommentsFallback = limitedPosts.reduce(
-          (sum: number, p: any) => sum + (p.num_comments || 0),
-          0
-        );
-        const fallbackAnalysis = {
-          opinions: [
-            {
-              opinion:
-                "Analysis limited due to processing constraints - multiple perspectives were shared",
-              count: limitedPosts.length,
-              examples: [
-                limitedPosts[0]?.title ||
-                  "Analysis constraints prevented detailed opinion extraction",
-              ],
-              confidence: 2,
-            },
-          ],
-          sentiments: {
-            positive: Math.floor(limitedPosts.length * 0.4),
-            negative: Math.floor(limitedPosts.length * 0.3),
-            neutral: Math.floor(limitedPosts.length * 0.3),
-            total: limitedPosts.length,
-            percentages: { positive: 40, negative: 30, neutral: 30 },
-          },
-          keyInsights: [
-            `Analyzed ${limitedPosts.length} posts from ${subreddits.length} communities`,
-            `Total engagement: ${totalScoreFallback} points and ${totalCommentsFallback} comments`,
-            `Communities involved: ${subreddits.slice(0, 3).join(", ")}${
-              subreddits.length > 3 ? " and others" : ""
-            }`,
-            "Detailed analysis was limited - consider using more specific queries for better insights",
-          ],
-          biases: `Analysis was limited due to processing constraints. The ${limitedPosts.length} posts came from ${subreddits.length} different communities, which may represent different demographic perspectives.`,
-          subredditAnalysis: Object.fromEntries(
-            subreddits.slice(0, 3).map((sub: string) => [
-              sub,
-              {
-                summary: `Community r/${sub} contributed to the discussion - detailed analysis was limited`,
-                sentiments: {
-                  positive: 1,
-                  negative: 0,
-                  neutral: 1,
-                  total: 2,
-                  percentages: { positive: 50, negative: 0, neutral: 50 },
-                },
-                dominantOpinions: [
-                  {
-                    opinion:
-                      "Processing constraints prevented detailed opinion extraction",
-                    strength: 2,
-                  },
-                ],
-              },
-            ])
-          ),
-          metadata: {
-            postsAnalyzed: limitedPosts.length,
-            subredditsIncluded: subreddits,
-            totalScore: totalScoreFallback,
-            totalComments: totalCommentsFallback,
-            analysisType,
-            focusArea: focusArea || null,
-            timestamp: new Date().toISOString(),
-            fallback: true,
-          },
-        };
-
-        return {
-          success: true,
-          message: `Completed basic analysis of ${limitedPosts.length} Reddit posts (detailed analysis limited)`,
-          analysis: fallbackAnalysis,
-          warning: "Analysis was simplified due to processing constraints",
-        };
-      }
+      return {
+        success: true,
+        message: `Completed ${analysisType} analysis of ${totalPostsAnalyzed} Reddit posts (batched)`,
+        analysis: enhancedAnalysis,
+        rawData: {
+          posts: limitedPosts.map((p: any) => ({
+            id: p.id,
+            title: p.title,
+            subreddit: p.subreddit,
+            score: p.score,
+            comments: p.num_comments,
+          })),
+        },
+      };
     } catch (error) {
       console.error("Reddit analysis error:", error);
       return {
