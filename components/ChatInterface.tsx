@@ -329,12 +329,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   );
 };
 
-// Component to render tool calls
-const ToolCallRenderer: React.FC<{
-  toolInvocation: any;
-  toolName: string;
-  icon: string;
-}> = ({ toolInvocation, toolName, icon }) => {
+// Memoize the ToolCallRenderer component to prevent unnecessary re-renders
+const ToolCallRenderer = React.memo(({ toolInvocation, toolName, icon }: { toolInvocation: any; toolName: string; icon: string }) => {
   const { state, args, result } = toolInvocation;
   
   switch (state) {
@@ -425,10 +421,16 @@ const ToolCallRenderer: React.FC<{
     default:
       return null;
   }
+});
+
+// Move tooltip formatter outside component to prevent recreation
+const tooltipFormatter = (value: any, name: string, props: any) => {
+  const entry = props.payload;
+  return [`${value} (${entry.percentage || 0}%)`, name];
 };
 
-// Component to render chart generation results
-const ChartRenderer: React.FC<{ toolInvocation: any }> = ({ toolInvocation }) => {
+// Memoize the ChartRenderer component to prevent unnecessary re-renders
+const ChartRenderer = React.memo(({ toolInvocation }: { toolInvocation: any }) => {
   const { state, result } = toolInvocation;
   
   if (state === 'call') {
@@ -457,12 +459,6 @@ const ChartRenderer: React.FC<{ toolInvocation: any }> = ({ toolInvocation }) =>
   }
 
   const { chartData, chartConfig } = result;
-  
-  // Memoize the tooltip formatter to prevent recreation on every render
-  const tooltipFormatter = React.useCallback((value: any, name: string, props: any) => {
-    const entry = props.payload;
-    return [`${value} (${entry.percentage || 0}%)`, name];
-  }, []);
   
   // Create a stable key for the chart container to prevent unnecessary re-renders
   const chartKey = `chart-${toolInvocation.toolCallId}-${chartConfig.type}`;
@@ -507,10 +503,10 @@ const ChartRenderer: React.FC<{ toolInvocation: any }> = ({ toolInvocation }) =>
       </div>
     </div>
   );
-};
+});
 
-// Component to render formatted lists
-const ListRenderer: React.FC<{ toolInvocation: any }> = ({ toolInvocation }) => {
+// Memoize the ListRenderer component to prevent unnecessary re-renders
+const ListRenderer = React.memo(({ toolInvocation }: { toolInvocation: any }) => {
   const { state, result } = toolInvocation;
   
   if (state === 'call') {
@@ -552,6 +548,6 @@ const ListRenderer: React.FC<{ toolInvocation: any }> = ({ toolInvocation }) => 
       </div>
     </div>
   );
-};
+});
 
 export default ChatInterface;
