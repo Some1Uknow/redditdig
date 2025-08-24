@@ -8,13 +8,19 @@ import ThemeToggle from "./ThemeToggle";
 interface WelcomeScreenProps {
   input: string;
   setInput: (value: string) => void;
-  handleSubmit: (e: React.FormEvent) => void;
+  handleInputChange: (
+    e:
+      | React.ChangeEvent<HTMLInputElement>
+      | React.ChangeEvent<HTMLTextAreaElement>
+  ) => void;
+  handleSubmit: (e: React.FormEvent<HTMLFormElement>) => void;
   isLoading: boolean;
 }
 
 const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
   input,
   setInput,
+  handleInputChange,
   handleSubmit,
   isLoading,
 }) => {
@@ -32,7 +38,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
 
       <InputForm
         input={input}
-        setInput={setInput}
+        handleInputChange={handleInputChange}
         handleSubmit={handleSubmit}
         isLoading={isLoading}
         isInitial={true}

@@ -14,8 +14,12 @@ import {
 
 interface InputFormProps {
   input: string;
-  setInput: (value: string) => void;
-  handleSubmit: (e: React.FormEvent) => void;
+  handleInputChange: (
+    e:
+      | React.ChangeEvent<HTMLInputElement>
+      | React.ChangeEvent<HTMLTextAreaElement>
+  ) => void;
+  handleSubmit: (e: React.FormEvent<HTMLFormElement>) => void;
   isLoading: boolean;
   isInitial?: boolean;
 }
@@ -34,7 +38,7 @@ interface SearchMode {
 
 const InputForm: React.FC<InputFormProps> = ({
   input,
-  setInput,
+  handleInputChange,
   handleSubmit,
   isLoading,
   isInitial = false,
@@ -98,7 +102,7 @@ const InputForm: React.FC<InputFormProps> = ({
         <CardContent className="p-2 pb-0">
           <Textarea
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={handleInputChange}
             placeholder="Ask a question about a Reddit topic..."
             className={inputClasses}
             disabled={isLoading}
@@ -203,7 +207,7 @@ const InputForm: React.FC<InputFormProps> = ({
           <div className="flex items-center space-x-2">
             <Button
               type="submit"
-              disabled={isLoading || !input.trim()}
+              disabled={isLoading || !(input || "").trim()}
               className="bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed"
             >
               <Send className="w-5 h-5" />

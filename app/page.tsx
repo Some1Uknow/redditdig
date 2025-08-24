@@ -1,90 +1,32 @@
 "use client";
 
+import { useChat } from "@ai-sdk/react";
 import { useState } from "react";
 import WelcomeScreen from "../components/WelcomeScreen";
 import ChatInterface from "../components/ChatInterface";
 
-interface Message {
-  role: "user" | "assistant";
-  content?: string;
-  summary?: string;
-  analysis?: {
-    opinions: { opinion: string; count: number; examples: string[] }[];
-    sentiments: {
-      positive: number;
-      negative: number;
-      neutral: number;
-      total: number;
-      percentages: { positive: number; negative: number; neutral: number };
-    };
-    biases: string;
-    subredditAnalysis: {
-      [key: string]: {
-        summary: string;
-        sentiments: {
-          positive: number;
-          negative: number;
-          neutral: number;
-          total: number;
-          percentages: { positive: number; negative: number; neutral: number };
-        };
-        opinions: { opinion: string; count: number }[];
-      };
-    };
-  };
-  chartData?: {
-    sentimentPie: { name: string; value: number }[];
-    opinionBar: { name: string; value: number; fullName?: string }[];
-  };
-  sources?: any[];
-}
-
 export default function Home() {
+  const { messages, sendMessage, status, error } = useChat({experimental_throttle: 30});
   const [input, setInput] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!input.trim() || isLoading) return;
+  const isLoading = status === "submitted" || status === "streaming";
 
-    const userMessage = { role: "user" as const, content: input };
-    const updatedMessages = [...messages, userMessage];
-    setMessages(updatedMessages);
-    setIsLoading(true);
-    setInput("");
-
-    try {
-      const response = await fetch("/api/summarize", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: updatedMessages }), // Pass all messages for context
-      });
-
-      if (!response.ok)
-        throw new Error(`Network error: ${response.statusText}`);
-
-      const data = await response.json();
-      const assistantMessage = {
-        role: "assistant" as const,
-        summary: data.summary,
-        analysis: data.analysis,
-        chartData: data.chartData,
-        sources: data.sources,
-      };
-      setMessages((prev) => [...prev, assistantMessage]);
-    } catch (error) {
-      console.error("Fetch error:", error);
-      const errorMessage = {
-        role: "assistant" as const,
-        summary:
-          "Sorry, I encountered an error while processing your request. Please try again.",
-      };
-      setMessages((prev) => [...prev, errorMessage]);
-    } finally {
-      setIsLoading(false);
-    }
+  const handleInputChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+  ) => {
+    setInput(e.target.value);
   };
+
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!input.trim()) return;
+    sendMessage({ text: input });
+    setInput("");
+  };
+
+  if (error) {
+    console.error("Chat error:", error);
+  }
 
   return (
     <div className="bg-gray-50 min-h-screen flex flex-col">
@@ -92,6 +34,7 @@ export default function Home() {
         <WelcomeScreen
           input={input}
           setInput={setInput}
+          handleInputChange={handleInputChange}
           handleSubmit={handleSubmit}
           isLoading={isLoading}
         />
@@ -100,7 +43,7 @@ export default function Home() {
           messages={messages}
           isLoading={isLoading}
           input={input}
-          setInput={setInput}
+          handleInputChange={handleInputChange}
           handleSubmit={handleSubmit}
         />
       )}
