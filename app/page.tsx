@@ -16,7 +16,7 @@ interface Message {
   };
   chartData?: {
     sentimentPie: { name: string; value: number }[];
-    opinionBar: { name: string; value: number }[];
+    opinionBar: { name: string; value: number; fullName?: string }[];
   };
   sources?: any[];
 }
@@ -31,7 +31,8 @@ export default function Home() {
     if (!input.trim() || isLoading) return;
 
     const userMessage = { role: "user" as const, content: input };
-    setMessages((prev) => [...prev, userMessage]);
+    const updatedMessages = [...messages, userMessage];
+    setMessages(updatedMessages);
     setIsLoading(true);
     setInput("");
 
@@ -39,7 +40,7 @@ export default function Home() {
       const response = await fetch("/api/summarize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: [userMessage] }),
+        body: JSON.stringify({ messages: updatedMessages }), // Pass all messages for context
       });
 
       if (!response.ok)

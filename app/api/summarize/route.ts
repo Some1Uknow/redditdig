@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import axios from "axios";
-import { generateText } from "ai";
+import { generateText, generateObject } from "ai";
 import { mistral } from "@ai-sdk/mistral";
-import axiosRetry from "axios-retry"; // Install via npm i axios-retry
+import axiosRetry from "axios-retry";
+import { z } from "zod";
 
 // Add retry logic to axios
 axiosRetry(axios, {
@@ -16,101 +17,169 @@ axiosRetry(axios, {
   },
 });
 
-async function generateRedditSearchQuery(conversation: string) {
-  const prompt = `Based on the following conversation history, generate a simple Reddit search query using basic keywords.
+// Define schemas for structured output
+const SearchQuerySchema = z.object({
+  keywords: z.array(z.string()).describe("Primary keywords for search"),
+  subreddits: z.array(z.string()).describe("Relevant subreddits to search in"),
+  excludeTerms: z.array(z.string()).describe("Terms to exclude from search"),
+  timeFilter: z
+    .enum(["all", "year", "month", "week", "day"])
+    .describe("Time filter for posts"),
+  sortBy: z
+    .enum(["relevance", "hot", "top", "new"])
+    .describe("Sort order for results"),
+});
 
-Guidelines:
-- Use simple keywords and phrases (no complex operators like AND, OR, NOT)
-- Focus on the main topic the user is asking about
-- Include relevant product names, brands, or specific terms
-- Keep it simple - Reddit search works better with basic terms
-- Maximum 10 words
-- Output ONLY the search query string, nothing else
+const AnalysisSchema = z.object({
+  opinions: z.array(
+    z.object({
+      opinion: z.string(),
+      count: z.number(),
+      examples: z.array(z.string()),
+    })
+  ),
+  sentiments: z.object({
+    positive: z.number(),
+    negative: z.number(),
+    neutral: z.number(),
+    total: z.number(),
+    percentages: z.object({
+      positive: z.number(),
+      negative: z.number(),
+      neutral: z.number(),
+    }),
+  }),
+  biases: z.string(),
+  subredditAnalysis: z.record(
+    z.object({
+      summary: z.string(),
+      sentiments: z.object({
+        positive: z.number(),
+        negative: z.number(),
+        neutral: z.number(),
+        total: z.number(),
+        percentages: z.object({
+          positive: z.number(),
+          negative: z.number(),
+          neutral: z.number(),
+        }),
+      }),
+      opinions: z.array(
+        z.object({
+          opinion: z.string(),
+          count: z.number(),
+        })
+      ),
+    })
+  ),
+});
 
-Conversation history:
-${conversation}`;
+async function generateRedditSearchStrategy(messages: any[]) {
+  // Build conversation context properly
+  const conversationContext = messages
+    .map((m) => `${m.role}: ${m.content}`)
+    .join("\n");
 
-  const { text: query } = await generateText({
+  const result = await generateObject({
     model: mistral("mistral-small-latest"),
-    prompt,
+    schema: SearchQuerySchema,
+    prompt: `Analyze this conversation and determine the best Reddit search strategy:
+
+${conversationContext}
+
+Based on the conversation:
+1. Extract the main keywords that would be most relevant for Reddit search
+2. Identify which subreddits would likely contain relevant discussions
+3. Determine what terms should be excluded to improve results
+4. Choose appropriate time filter and sort order
+
+Be intelligent about subreddit selection - think about where discussions about this topic would naturally occur.`,
   });
 
-  // Clean and simplify the query
-  let cleanedQuery = query.trim()
-    .replace(/[`"']/g, '') // Remove quotes and backticks
-    .replace(/\s+/g, ' ') // Normalize spaces
-    .replace(/\b(AND|OR|NOT)\b/gi, '') // Remove boolean operators
-    .replace(/[()]/g, '') // Remove parentheses
-    .replace(/title:|subreddit:|selftext:|author:|timestamp:/gi, '') // Remove search operators
-    .trim();
-
-  // Fallback: if model output is invalid, use simple keyword extraction
-  if (!cleanedQuery || cleanedQuery.length < 3) {
-    cleanedQuery = conversation
-      .toLowerCase()
-      .replace(/[^\w\s]/g, " ")
-      .split(/\s+/)
-      .filter((w) => w.length > 2)
-      .slice(0, 5) // Limit to 5 words
-      .join(" ");
-  }
-
-  return cleanedQuery;
+  return result.object;
 }
 
-async function scrapeRedditPosts(searchQuery: string, limit = 5) {
+async function scrapeRedditPosts(searchStrategy: any, limit = 5) {
   try {
-    console.log(`Scraping Reddit with query: "${searchQuery}"...`);
+    const { keywords, subreddits, excludeTerms, sortBy } = searchStrategy;
     
-    // Step 1: Try multiple search approaches
+    // Add safety checks for the search strategy parameters
+    const safeKeywords = Array.isArray(keywords) ? keywords.filter(k => k && typeof k === 'string') : [];
+    const safeSubreddits = Array.isArray(subreddits) ? subreddits.filter(s => s && typeof s === 'string') : [];
+    const safeExcludeTerms = Array.isArray(excludeTerms) ? excludeTerms.filter(t => t && typeof t === 'string') : [];
+    const safeSortBy = sortBy || "relevance";
+    
+    if (safeKeywords.length === 0) {
+      console.log("No valid keywords found in search strategy");
+      return [];
+    }
+    
+    const searchQuery = safeKeywords.join(" ");
+    const excludeQuery = safeExcludeTerms.length > 0 ? ` -${safeExcludeTerms.join(" -")}` : "";
+    const fullQuery = searchQuery + excludeQuery;
+
+    console.log(`Scraping Reddit with strategy:`, {
+      keywords: safeKeywords,
+      subreddits: safeSubreddits,
+      excludeTerms: safeExcludeTerms,
+      sortBy: safeSortBy
+    });
+
+    // Build search approaches based on the strategy
     const searchApproaches = [
-      // Approach 1: General search
+      // General search
       {
         url: "https://www.reddit.com/search.json",
-        params: { q: searchQuery, limit: limit * 3, sort: "relevance", type: "link" }
+        params: { q: fullQuery, limit: limit * 2, sort: safeSortBy, type: "link" },
       },
-      // Approach 2: Search in specific subreddits if the query seems to be about tech/products
-      ...(searchQuery.toLowerCase().includes('macbook') || searchQuery.toLowerCase().includes('laptop') || searchQuery.toLowerCase().includes('computer') ? 
-        [
-          {
-            url: "https://www.reddit.com/r/Apple/search.json",
-            params: { q: searchQuery, restrict_sr: "on", limit: limit * 2, sort: "relevance", type: "link" }
-          },
-          {
-            url: "https://www.reddit.com/r/mac/search.json", 
-            params: { q: searchQuery, restrict_sr: "on", limit: limit * 2, sort: "relevance", type: "link" }
-          }
-        ] : [])
+      // Subreddit-specific searches
+      ...safeSubreddits.map((subreddit: string) => ({
+        url: `https://www.reddit.com/r/${subreddit}/search.json`,
+        params: {
+          q: searchQuery,
+          restrict_sr: "on",
+          limit: Math.max(2, Math.floor(limit / Math.max(safeSubreddits.length, 1))),
+          sort: safeSortBy,
+          type: "link",
+        },
+      })),
     ];
 
     let allPosts: any[] = [];
-    
+
     for (const approach of searchApproaches) {
       try {
-        console.log(`Trying search approach: ${approach.url}`);
+        console.log(
+          `Searching in: ${approach.url} with query: ${approach.params.q}`
+        );
         const searchResponse = await axios.get(approach.url, {
           params: approach.params,
           headers: {
-            "User-Agent": "Reddit-Insight-App/1.1 (contact: your.email@example.com)",
+            "User-Agent":
+              "Reddit-Insight-App/1.1 (contact: your.email@example.com)",
           },
         });
 
         const posts = searchResponse.data.data.children;
         console.log(`Found ${posts.length} posts from ${approach.url}`);
         allPosts.push(...posts);
-        
-        // Add delay between different search approaches
-        await new Promise((resolve) => setTimeout(resolve, 500));
+
+        // Rate limiting
+        await new Promise((resolve) => setTimeout(resolve, 300));
       } catch (err) {
-        console.error(`Error with search approach ${approach.url}:`, (err as Error).message);
+        console.error(
+          `Error with search approach ${approach.url}:`,
+          (err as Error).message
+        );
       }
     }
 
-    // Remove duplicates based on post id
-    const uniquePosts = allPosts.filter((post, index, self) => 
-      index === self.findIndex(p => p.data.id === post.data.id)
+    // Remove duplicates
+    const uniquePosts = allPosts.filter(
+      (post, index, self) =>
+        index === self.findIndex((p) => p?.data?.id === post?.data?.id)
     );
-    
+
     console.log(`Found ${uniquePosts.length} unique posts after deduplication`);
 
     if (uniquePosts.length === 0) {
@@ -118,60 +187,107 @@ async function scrapeRedditPosts(searchQuery: string, limit = 5) {
       return [];
     }
 
-    // Step 2: Filter and score posts for relevance
+    // Log a sample of the posts for debugging
+    console.log("Sample post data structure:", {
+      firstPost: uniquePosts[0]?.data ? {
+        id: uniquePosts[0].data.id,
+        title: uniquePosts[0].data.title?.substring(0, 50),
+        subreddit: uniquePosts[0].data.subreddit,
+        hasPermalink: !!uniquePosts[0].data.permalink
+      } : "No data"
+    });
+
+    // Smart relevance scoring based on search strategy
     const scoredPosts = uniquePosts
-      .map(post => {
+      .filter((post) => post.data && post.data.title && post.data.subreddit) // Filter out invalid posts
+      .map((post) => {
         let relevanceScore = 0;
-        const title = post.data.title.toLowerCase();
-        const subreddit = post.data.subreddit.toLowerCase();
-        const queryWords = searchQuery.toLowerCase().split(' ');
-        
-        // Score based on title relevance
-        queryWords.forEach(word => {
-          if (word.length > 2 && title.includes(word)) {
-            relevanceScore += 2;
+        const title = post.data.title?.toLowerCase() || "";
+        const subreddit = post.data.subreddit?.toLowerCase() || "";
+
+        // Score based on keyword presence
+        safeKeywords.forEach((keyword: string) => {
+          if (keyword && title.includes(keyword.toLowerCase())) {
+            relevanceScore += 3;
           }
         });
-        
-        // Bonus for relevant subreddits
-        const relevantSubs = ['apple', 'mac', 'macbook', 'laptops', 'suggestalaptop', 'buyitforlife'];
-        if (relevantSubs.includes(subreddit)) {
-          relevanceScore += 3;
+
+        // Score based on target subreddits
+        if (
+          safeSubreddits.map((s: string) => s.toLowerCase()).includes(subreddit)
+        ) {
+          relevanceScore += 5;
         }
-        
-        // Bonus for engagement
-        relevanceScore += Math.min(post.data.score / 10, 5);
-        relevanceScore += Math.min(post.data.num_comments / 5, 3);
-        
+
+        // Penalize excluded terms
+        safeExcludeTerms.forEach((term: string) => {
+          if (term && title.includes(term.toLowerCase())) {
+            relevanceScore -= 2;
+          }
+        });
+
+        // Engagement bonus (with null checks)
+        const score = post.data.score || 0;
+        const comments = post.data.num_comments || 0;
+        relevanceScore += Math.log(score + 1) * 0.5;
+        relevanceScore += Math.log(comments + 1) * 0.3;
+
         return { ...post, relevanceScore };
       })
       .sort((a, b) => b.relevanceScore - a.relevanceScore)
-      .slice(0, limit * 2); // Take top scored posts, more than needed in case some fail
+      .slice(0, limit * 2);
 
-    // Step 3: Fetch the full content for each post with delay to avoid rate limits
+    // Fetch detailed content
     const detailedPosts = [];
     let successCount = 0;
-    
+
     for (const post of scoredPosts) {
       if (successCount >= limit) break;
-      
+
       try {
-        console.log(`Fetching post ${successCount + 1}/${limit}: ${post.data.title.substring(0, 50)}...`);
+        // Additional safety checks
+        if (!post.data || !post.data.permalink || !post.data.title) {
+          console.log(`Skipping invalid post: ${post.data?.id || 'unknown'}`);
+          continue;
+        }
+
+        console.log(
+          `Fetching post ${
+            successCount + 1
+          }/${limit}: ${post.data.title.substring(0, 50)}...`
+        );
         const response = await axios.get(
           `https://www.reddit.com${post.data.permalink}.json`,
           {
             headers: {
-              "User-Agent": "Reddit-Insight-App/1.1 (contact: your.email@example.com)",
+              "User-Agent":
+                "Reddit-Insight-App/1.1 (contact: your.email@example.com)",
             },
           }
         );
-        const postData = response.data[0].data.children[0].data;
-        const commentsData = response.data[1].data.children;
 
-        // Extract top 5 comments (increased for better analysis)
+        // Check if response has expected structure
+        if (!response.data || !Array.isArray(response.data) || response.data.length < 2) {
+          console.log(`Invalid response structure for post ${post.data.id}`);
+          continue;
+        }
+
+        const postData = response.data[0]?.data?.children?.[0]?.data;
+        const commentsData = response.data[1]?.data?.children || [];
+
+        if (!postData) {
+          console.log(`No post data found for ${post.data.id}`);
+          continue;
+        }
+
         const topComments = commentsData
           .slice(0, 5)
-          .filter((comment: any) => comment.data.body && comment.data.body !== '[deleted]' && comment.data.body !== '[removed]')
+          .filter(
+            (comment: any) =>
+              comment.data.body &&
+              comment.data.body !== "[deleted]" &&
+              comment.data.body !== "[removed]"
+          )
           .map(
             (comment: any, i: number) =>
               `Comment ${i + 1}: ${comment.data.body}`
@@ -197,16 +313,14 @@ async function scrapeRedditPosts(searchQuery: string, limit = 5) {
         successCount++;
         console.log(`Successfully fetched post ${successCount}/${limit}`);
 
-        // Delay 1-2 seconds between requests
         await new Promise((resolve) =>
-          setTimeout(resolve, 1000 + Math.random() * 1000)
+          setTimeout(resolve, 1000 + Math.random() * 500)
         );
       } catch (err) {
         console.error(
           `Error fetching post ${post.data.id}:`,
           (err as Error).message
         );
-        // Continue to next post on error
       }
     }
 
@@ -230,7 +344,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 1. Build full conversation history
+    // 1. Build full conversation history (properly handle multiple messages)
     const conversation = messages
       .map(
         (m: { role: string; content: string }) =>
@@ -238,12 +352,12 @@ export async function POST(request: NextRequest) {
       )
       .join("\n\n");
 
-    // 2. Generate advanced search query via Mistral
-    const searchQuery = await generateRedditSearchQuery(conversation);
-    console.log(`Conversation → Search Query: "${searchQuery}"`);
+    // 2. Generate intelligent search strategy via AI
+    const searchStrategy = await generateRedditSearchStrategy(messages);
+    console.log(`Generated search strategy:`, searchStrategy);
 
-    // 3. Scrape using the generated query
-    const posts = await scrapeRedditPosts(searchQuery, 5);
+    // 3. Scrape using the intelligent strategy
+    const posts = await scrapeRedditPosts(searchStrategy, 5);
     console.log(`Scraped ${posts.length} posts successfully`);
 
     if (posts.length === 0) {
@@ -285,84 +399,89 @@ ${post.fullContent}`
       prompt: summaryPrompt,
     });
 
-    // 6. Generate advanced analysis
-    const analysisPrompt = `You are an advanced data analyst. Analyze the Reddit data and output ONLY valid JSON with no markdown formatting.
-    
-    Analyze based on the content:
-    - Identify main opinions/themes with counts
-    - Perform sentiment analysis with exact counts and percentages
-    - Detect potential biases
-    - Analyze per subreddit
-    
-    Output format (JSON only, no backticks):
-    {
-      "opinions": [{"opinion": "Brief description", "count": 1, "examples": ["example"]}],
-      "sentiments": {"positive": 0, "negative": 0, "neutral": 1, "total": 1, "percentages": {"positive": 0, "negative": 0, "neutral": 100}},
-      "biases": "Description of biases",
-      "subredditAnalysis": {"subredditName": {"summary": "Summary", "sentiments": {"positive": 0, "negative": 0, "neutral": 1, "total": 1, "percentages": {"positive": 0, "negative": 0, "neutral": 100}}, "opinions": [{"opinion": "opinion", "count": 1}]}}
-    }
-    
-    Data: ${context}`;
-
-    const { text: analysisText } = await generateText({
-      model: mistral("ministral-8b-latest"),
-      prompt: analysisPrompt,
-    });
-
+    // 6. Generate advanced analysis using structured output
     let analysis;
     try {
-      // Clean potential markdown fences from the AI's output
-      let cleanedJsonString = analysisText.trim();
-      
-      // Remove markdown code fences
-      cleanedJsonString = cleanedJsonString
-        .replace(/^```json\s*/i, "")
-        .replace(/^```\s*/, "")
-        .replace(/```\s*$/g, "")
-        .trim();
-      
-      console.log("Cleaned JSON string length:", cleanedJsonString.length);
-      analysis = JSON.parse(cleanedJsonString);
-      console.log("Successfully parsed analysis JSON");
+      const result = await generateObject({
+        model: mistral("ministral-8b-latest"),
+        schema: AnalysisSchema,
+        prompt: `Analyze this Reddit data comprehensively and extract meaningful insights:
+
+${context}
+
+Instructions:
+1. OPINIONS: Identify distinct viewpoints, recommendations, or conclusions expressed in posts/comments. Focus on actionable insights, product recommendations, or clear stances. Each opinion should represent a meaningful perspective.
+2. SENTIMENT: Analyze the emotional tone of each post and comment. Count positive (satisfied, recommending, happy), negative (frustrated, warning, complaining), and neutral (informational, factual) sentiments.
+3. BIASES: Look for echo chambers, promotional content, brand favoritism, or demographic skews.
+4. SUBREDDIT ANALYSIS: Analyze how different communities approach the topic differently.
+
+Provide specific examples and accurate counts. Make sure opinions are substantial and meaningful, not just keywords.`,
+      });
+
+      analysis = result.object;
+      console.log("Successfully generated structured analysis");
+      console.log("Analysis opinions count:", analysis.opinions?.length || 0);
+      console.log("Analysis sentiments:", analysis.sentiments);
+      console.log("First opinion example:", analysis.opinions?.[0]);
     } catch (err) {
-      console.error("Analysis JSON parse error:", err);
-      console.error("Original text that failed parsing:", analysisText.substring(0, 500) + "..."); // Log first 500 chars
-      analysis = { 
-        error: "Failed to parse analysis.",
+      console.error("Analysis generation error:", err);
+      analysis = {
         opinions: [],
-        sentiments: { positive: 0, negative: 0, neutral: 0, total: 0, percentages: { positive: 0, negative: 0, neutral: 0 } },
-        biases: "Analysis parsing failed",
-        subredditAnalysis: {}
+        sentiments: {
+          positive: 0,
+          negative: 0,
+          neutral: 0,
+          total: 0,
+          percentages: { positive: 0, negative: 0, neutral: 0 },
+        },
+        biases: "Analysis generation failed",
+        subredditAnalysis: {},
       };
     }
 
     // 7. Prepare chart data (extract from analysis for frontend rendering)
     const chartData = {
-      sentimentPie: analysis.sentiments && analysis.sentiments.percentages
-        ? [
-            {
-              name: "Positive",
-              value: analysis.sentiments.percentages.positive || 0,
-            },
-            {
-              name: "Negative", 
-              value: analysis.sentiments.percentages.negative || 0,
-            },
-            { name: "Neutral", value: analysis.sentiments.percentages.neutral || 0 },
-          ].filter((item: {name: string, value: number}) => item.value > 0) // Only include non-zero values
-        : [],
-      opinionBar: analysis.opinions && Array.isArray(analysis.opinions)
-        ? analysis.opinions.map((op: any) => ({
-            name: op.opinion || "Unknown",
-            value: op.count || 0,
-          })).filter((item: {name: string, value: number}) => item.value > 0) // Only include non-zero values
-        : [],
-      // Add more as needed, e.g., per subreddit
+      sentimentPie:
+        analysis.sentiments && analysis.sentiments.percentages
+          ? [
+              {
+                name: "Positive",
+                value: analysis.sentiments.percentages.positive || 0,
+              },
+              {
+                name: "Negative",
+                value: analysis.sentiments.percentages.negative || 0,
+              },
+              {
+                name: "Neutral",
+                value: analysis.sentiments.percentages.neutral || 0,
+              },
+            ].filter((item: { name: string; value: number }) => item.value > 0) // Only include non-zero values
+          : [],
+      opinionBar:
+        analysis.opinions && Array.isArray(analysis.opinions)
+          ? analysis.opinions
+              .map((op: any) => ({
+                name:
+                  op.opinion && op.opinion.length > 30
+                    ? op.opinion.substring(0, 30) + "..."
+                    : op.opinion || "Unknown",
+                fullName: op.opinion || "Unknown", // Keep full name for tooltip
+                value: op.count || 0,
+              }))
+              .filter(
+                (item: { name: string; value: number; fullName: string }) =>
+                  item.value > 0
+              )
+              .slice(0, 8) // Limit to top 8 opinions for readability
+          : [],
     };
 
     console.log("Chart data prepared:", {
       sentimentPieCount: chartData.sentimentPie.length,
-      opinionBarCount: chartData.opinionBar.length
+      opinionBarCount: chartData.opinionBar.length,
+      analysisOpinionsCount: analysis.opinions?.length || 0,
+      firstOpinion: analysis.opinions?.[0],
     });
 
     return NextResponse.json({
