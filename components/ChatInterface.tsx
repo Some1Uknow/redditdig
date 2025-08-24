@@ -277,41 +277,86 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
                           {/* Biases */}
                           {message.analysis.biases && (
-                            <div className="mb-4">
-                              <h3 className="text-lg font-semibold mb-2">Detected Biases</h3>
-                              <p>{message.analysis.biases}</p>
+                            <div className="mb-6">
+                              <h3 className="text-lg font-semibold mb-3">🔍 Detected Biases</h3>
+                              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                                <div className="flex items-start">
+                                  <div className="flex-shrink-0">
+                                    <div className="w-6 h-6 bg-amber-100 rounded-full flex items-center justify-center">
+                                      <span className="text-amber-600 text-sm">⚠️</span>
+                                    </div>
+                                  </div>
+                                  <div className="ml-3">
+                                    <p className="text-amber-800 text-sm leading-relaxed">
+                                      {message.analysis.biases}
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
                             </div>
                           )}
 
                           {/* Subreddit Analysis */}
                           {message.analysis.subredditAnalysis && Object.keys(message.analysis.subredditAnalysis).length > 0 && (
-                            <div>
-                              <h3 className="text-lg font-semibold mb-2">Analysis by Subreddit</h3>
-                              {Object.entries(message.analysis.subredditAnalysis).map(([sub, data]) => (
-                                <div key={sub} className="mb-4 border-t pt-2">
-                                  <h4 className="text-md font-medium">r/{sub}</h4>
-                                  <p className="mb-2">{data.summary}</p>
-                                  <div className="mb-2">
-                                    <strong>Sentiments:</strong>
-                                    <p>Positive: {data.sentiments.positive} ({data.sentiments.percentages.positive}%)</p>
-                                    <p>Negative: {data.sentiments.negative} ({data.sentiments.percentages.negative}%)</p>
-                                    <p>Neutral: {data.sentiments.neutral} ({data.sentiments.percentages.neutral}%)</p>
-                                    <p>Total: {data.sentiments.total}</p>
-                                  </div>
-                                  {data.opinions && data.opinions.length > 0 && (
-                                    <div>
-                                      <strong>Opinions:</strong>
-                                      <ul className="list-disc pl-5 space-y-1">
-                                        {data.opinions.map((op, idx) => (
-                                          <li key={idx}>
-                                            {op.opinion} (Count: {op.count})
-                                          </li>
-                                        ))}
-                                      </ul>
+                            <div className="mb-6">
+                              <h3 className="text-lg font-semibold mb-3">📊 Analysis by Community</h3>
+                              <div className="space-y-4">
+                                {Object.entries(message.analysis.subredditAnalysis).map(([sub, data]) => (
+                                  <div key={sub} className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-sm transition-shadow">
+                                    <div className="flex items-center justify-between mb-3">
+                                      <h4 className="text-md font-medium text-gray-900 flex items-center">
+                                        <span className="w-8 h-8 bg-orange-100 rounded-full flex items-center justify-center mr-3">
+                                          <span className="text-orange-600 text-xs font-bold">r/</span>
+                                        </span>
+                                        {sub}
+                                      </h4>
+                                      <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                                        {data.sentiments.total} posts analyzed
+                                      </span>
                                     </div>
-                                  )}
-                                </div>
-                              ))}
+                                    
+                                    <p className="text-gray-700 text-sm mb-3 leading-relaxed">{data.summary}</p>
+                                    
+                                    {/* Mini sentiment indicators */}
+                                    <div className="flex items-center space-x-4 mb-3">
+                                      <div className="flex items-center text-xs">
+                                        <div className="w-3 h-3 bg-green-400 rounded-full mr-1"></div>
+                                        <span className="text-gray-600">{data.sentiments.percentages.positive.toFixed(0)}% positive</span>
+                                      </div>
+                                      <div className="flex items-center text-xs">
+                                        <div className="w-3 h-3 bg-red-400 rounded-full mr-1"></div>
+                                        <span className="text-gray-600">{data.sentiments.percentages.negative.toFixed(0)}% negative</span>
+                                      </div>
+                                      <div className="flex items-center text-xs">
+                                        <div className="w-3 h-3 bg-yellow-400 rounded-full mr-1"></div>
+                                        <span className="text-gray-600">{data.sentiments.percentages.neutral.toFixed(0)}% neutral</span>
+                                      </div>
+                                    </div>
+
+                                    {/* Community-specific opinions */}
+                                    {data.opinions && data.opinions.length > 0 && (
+                                      <div>
+                                        <h5 className="text-sm font-medium text-gray-800 mb-2">Key Community Perspectives:</h5>
+                                        <div className="space-y-1">
+                                          {data.opinions.slice(0, 3).map((op, idx) => (
+                                            <div key={idx} className="flex items-center justify-between text-sm">
+                                              <span className="text-gray-700 flex-1">{op.opinion}</span>
+                                              <span className="text-xs text-gray-500 bg-gray-50 px-2 py-1 rounded ml-2">
+                                                {op.count}
+                                              </span>
+                                            </div>
+                                          ))}
+                                          {data.opinions.length > 3 && (
+                                            <div className="text-xs text-gray-500 mt-2">
+                                              +{data.opinions.length - 3} more perspectives
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
                             </div>
                           )}
                         </div>
@@ -330,9 +375,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   className="w-8 h-8 rounded-full mt-2"
                 />
                 <div className="w-4/5 text-gray-700 p-4 rounded-lg bg-gray-50">
-                  <p className="text-sm leading-relaxed animate-pulse">
-                    Thinking...
-                  </p>
+                  <div className="flex items-center space-x-2">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-orange-500"></div>
+                    <p className="text-sm leading-relaxed">
+                      Analyzing Reddit discussions...
+                    </p>
+                  </div>
+                  <div className="mt-2 text-xs text-gray-500">
+                    🔍 Searching relevant posts → 📊 Processing data → 🤖 Generating insights
+                  </div>
                 </div>
               </div>
             )}

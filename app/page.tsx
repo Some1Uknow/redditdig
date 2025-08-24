@@ -10,9 +10,27 @@ interface Message {
   summary?: string;
   analysis?: {
     opinions: { opinion: string; count: number; examples: string[] }[];
-    sentiments: { positive: number; negative: number; neutral: number; total: number; percentages: { positive: number; negative: number; neutral: number } };
+    sentiments: {
+      positive: number;
+      negative: number;
+      neutral: number;
+      total: number;
+      percentages: { positive: number; negative: number; neutral: number };
+    };
     biases: string;
-    subredditAnalysis: { [key: string]: { summary: string; sentiments: { positive: number; negative: number; neutral: number; total: number; percentages: { positive: number; negative: number; neutral: number } }; opinions: { opinion: string; count: number }[] } };
+    subredditAnalysis: {
+      [key: string]: {
+        summary: string;
+        sentiments: {
+          positive: number;
+          negative: number;
+          neutral: number;
+          total: number;
+          percentages: { positive: number; negative: number; neutral: number };
+        };
+        opinions: { opinion: string; count: number }[];
+      };
+    };
   };
   chartData?: {
     sentimentPie: { name: string; value: number }[];

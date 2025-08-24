@@ -102,27 +102,34 @@ Be intelligent about subreddit selection - think about where discussions about t
 async function scrapeRedditPosts(searchStrategy: any, limit = 5) {
   try {
     const { keywords, subreddits, excludeTerms, sortBy } = searchStrategy;
-    
+
     // Add safety checks for the search strategy parameters
-    const safeKeywords = Array.isArray(keywords) ? keywords.filter(k => k && typeof k === 'string') : [];
-    const safeSubreddits = Array.isArray(subreddits) ? subreddits.filter(s => s && typeof s === 'string') : [];
-    const safeExcludeTerms = Array.isArray(excludeTerms) ? excludeTerms.filter(t => t && typeof t === 'string') : [];
+    const safeKeywords = Array.isArray(keywords)
+      ? keywords.filter((k) => k && typeof k === "string")
+      : [];
+    const safeSubreddits = Array.isArray(subreddits)
+      ? subreddits.filter((s) => s && typeof s === "string")
+      : [];
+    const safeExcludeTerms = Array.isArray(excludeTerms)
+      ? excludeTerms.filter((t) => t && typeof t === "string")
+      : [];
     const safeSortBy = sortBy || "relevance";
-    
+
     if (safeKeywords.length === 0) {
       console.log("No valid keywords found in search strategy");
       return [];
     }
-    
+
     const searchQuery = safeKeywords.join(" ");
-    const excludeQuery = safeExcludeTerms.length > 0 ? ` -${safeExcludeTerms.join(" -")}` : "";
+    const excludeQuery =
+      safeExcludeTerms.length > 0 ? ` -${safeExcludeTerms.join(" -")}` : "";
     const fullQuery = searchQuery + excludeQuery;
 
     console.log(`Scraping Reddit with strategy:`, {
       keywords: safeKeywords,
       subreddits: safeSubreddits,
       excludeTerms: safeExcludeTerms,
-      sortBy: safeSortBy
+      sortBy: safeSortBy,
     });
 
     // Build search approaches based on the strategy
@@ -130,7 +137,12 @@ async function scrapeRedditPosts(searchStrategy: any, limit = 5) {
       // General search
       {
         url: "https://www.reddit.com/search.json",
-        params: { q: fullQuery, limit: limit * 2, sort: safeSortBy, type: "link" },
+        params: {
+          q: fullQuery,
+          limit: limit * 2,
+          sort: safeSortBy,
+          type: "link",
+        },
       },
       // Subreddit-specific searches
       ...safeSubreddits.map((subreddit: string) => ({
@@ -138,7 +150,10 @@ async function scrapeRedditPosts(searchStrategy: any, limit = 5) {
         params: {
           q: searchQuery,
           restrict_sr: "on",
-          limit: Math.max(2, Math.floor(limit / Math.max(safeSubreddits.length, 1))),
+          limit: Math.max(
+            2,
+            Math.floor(limit / Math.max(safeSubreddits.length, 1))
+          ),
           sort: safeSortBy,
           type: "link",
         },
@@ -189,12 +204,14 @@ async function scrapeRedditPosts(searchStrategy: any, limit = 5) {
 
     // Log a sample of the posts for debugging
     console.log("Sample post data structure:", {
-      firstPost: uniquePosts[0]?.data ? {
-        id: uniquePosts[0].data.id,
-        title: uniquePosts[0].data.title?.substring(0, 50),
-        subreddit: uniquePosts[0].data.subreddit,
-        hasPermalink: !!uniquePosts[0].data.permalink
-      } : "No data"
+      firstPost: uniquePosts[0]?.data
+        ? {
+            id: uniquePosts[0].data.id,
+            title: uniquePosts[0].data.title?.substring(0, 50),
+            subreddit: uniquePosts[0].data.subreddit,
+            hasPermalink: !!uniquePosts[0].data.permalink,
+          }
+        : "No data",
     });
 
     // Smart relevance scoring based on search strategy
@@ -247,7 +264,7 @@ async function scrapeRedditPosts(searchStrategy: any, limit = 5) {
       try {
         // Additional safety checks
         if (!post.data || !post.data.permalink || !post.data.title) {
-          console.log(`Skipping invalid post: ${post.data?.id || 'unknown'}`);
+          console.log(`Skipping invalid post: ${post.data?.id || "unknown"}`);
           continue;
         }
 
@@ -267,7 +284,11 @@ async function scrapeRedditPosts(searchStrategy: any, limit = 5) {
         );
 
         // Check if response has expected structure
-        if (!response.data || !Array.isArray(response.data) || response.data.length < 2) {
+        if (
+          !response.data ||
+          !Array.isArray(response.data) ||
+          response.data.length < 2
+        ) {
           console.log(`Invalid response structure for post ${post.data.id}`);
           continue;
         }
@@ -333,55 +354,65 @@ async function scrapeRedditPosts(searchStrategy: any, limit = 5) {
 }
 
 export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json();
-    const { messages } = body;
+  // Add timeout wrapper
+  const timeout = new Promise((_, reject) =>
+    setTimeout(
+      () => reject(new Error("Request timeout after 30 seconds")),
+      30000
+    )
+  );
 
-    if (!messages || !Array.isArray(messages) || messages.length === 0) {
-      return NextResponse.json(
-        { error: "No messages provided" },
-        { status: 400 }
-      );
-    }
+  const processRequest = async () => {
+    try {
+      const body = await request.json();
+      const { messages } = body;
 
-    // 1. Build full conversation history (properly handle multiple messages)
-    const conversation = messages
-      .map(
-        (m: { role: string; content: string }) =>
-          `${m.role.toUpperCase()}: ${m.content}`
-      )
-      .join("\n\n");
+      if (!messages || !Array.isArray(messages) || messages.length === 0) {
+        return NextResponse.json(
+          { error: "No messages provided" },
+          { status: 400 }
+        );
+      }
 
-    // 2. Generate intelligent search strategy via AI
-    const searchStrategy = await generateRedditSearchStrategy(messages);
-    console.log(`Generated search strategy:`, searchStrategy);
+      // 1. Build full conversation history (properly handle multiple messages)
+      const conversation = messages
+        .map(
+          (m: { role: string; content: string }) =>
+            `${m.role.toUpperCase()}: ${m.content}`
+        )
+        .join("\n\n");
 
-    // 3. Scrape using the intelligent strategy
-    const posts = await scrapeRedditPosts(searchStrategy, 5);
-    console.log(`Scraped ${posts.length} posts successfully`);
+      // 2. Generate intelligent search strategy via AI
+      const searchStrategy = await generateRedditSearchStrategy(messages);
+      console.log(`Generated search strategy:`, searchStrategy);
 
-    if (posts.length === 0) {
-      return NextResponse.json(
-        { error: "No Reddit data found for the query." },
-        { status: 404 }
-      );
-    }
+      // 3. Scrape using the intelligent strategy
+      const posts = await scrapeRedditPosts(searchStrategy, 5);
+      console.log(`Scraped ${posts.length} posts successfully`);
 
-    // 4. Build context
-    const context = posts
-      .map(
-        (post, index) =>
-          `Source [${index + 1}]:
+      if (posts.length === 0) {
+        return NextResponse.json(
+          { error: "No Reddit data found for the query." },
+          { status: 404 }
+        );
+      }
+
+      // 4. Build context
+      const context = posts
+        .map(
+          (post, index) =>
+            `Source [${index + 1}]:
 Subreddit: r/${post.subreddit}
 Title: ${post.title}
 URL: ${post.url}
 Content and Top Comments:
 ${post.fullContent}`
-      )
-      .join("\n\n---\n\n");
+        )
+        .join("\n\n---\n\n");
 
-    // 5. Generate summary
-    const summaryPrompt = `You are a Reddit research analyst. Based *only* on the provided Reddit posts, including their main content and top comments, generate a comprehensive and neutral summary.
+      // 5. Generate summary
+      console.log("🔍 Starting summary generation...");
+      const summaryPrompt = `You are a Reddit research analyst. Based *only* on the provided Reddit posts, including their main content and top comments, generate a comprehensive and neutral summary.
     
     Instructions:
     1. Start with a direct, insightful summary paragraph that captures the main themes and sentiments.
@@ -394,18 +425,21 @@ ${post.fullContent}`
     
     Provide your detailed analysis now:`;
 
-    const { text: summary } = await generateText({
-      model: mistral("ministral-8b-latest"),
-      prompt: summaryPrompt,
-    });
-
-    // 6. Generate advanced analysis using structured output
-    let analysis;
-    try {
-      const result = await generateObject({
+      const { text: summary } = await generateText({
         model: mistral("ministral-8b-latest"),
-        schema: AnalysisSchema,
-        prompt: `Analyze this Reddit data comprehensively and extract meaningful insights:
+        prompt: summaryPrompt,
+        maxTokens: 1500, // Add token limit
+      });
+      console.log("✅ Summary generation completed");
+
+      // 6. Generate advanced analysis using structured output
+      let analysis;
+      try {
+        console.log("Starting analysis generation...");
+        const result = await generateObject({
+          model: mistral("ministral-8b-latest"),
+          schema: AnalysisSchema,
+          prompt: `Analyze this Reddit data comprehensively and extract meaningful insights:
 
 ${context}
 
@@ -416,84 +450,134 @@ Instructions:
 4. SUBREDDIT ANALYSIS: Analyze how different communities approach the topic differently.
 
 Provide specific examples and accurate counts. Make sure opinions are substantial and meaningful, not just keywords.`,
+          maxTokens: 2000, // Add token limit to prevent timeouts
+        });
+
+        analysis = result.object;
+        console.log("✅ Analysis generation completed successfully");
+        console.log("Analysis opinions count:", analysis.opinions?.length || 0);
+        console.log("Analysis sentiments:", analysis.sentiments);
+        console.log("First opinion example:", analysis.opinions?.[0]);
+      } catch (err) {
+        console.error("❌ Analysis generation error:", err);
+        // Create a more detailed fallback analysis
+        analysis = {
+          opinions: [
+            {
+              opinion:
+                "Analysis could not be generated due to processing limitations",
+              count: 1,
+              examples: ["Please try with a simpler query"],
+            },
+          ],
+          sentiments: {
+            positive: 1,
+            negative: 0,
+            neutral: 0,
+            total: 1,
+            percentages: { positive: 100, negative: 0, neutral: 0 },
+          },
+          biases:
+            "Analysis generation failed - unable to detect biases in the provided content",
+          subredditAnalysis: {
+            general: {
+              summary:
+                "Analysis was not completed due to processing constraints",
+              sentiments: {
+                positive: 1,
+                negative: 0,
+                neutral: 0,
+                total: 1,
+                percentages: { positive: 100, negative: 0, neutral: 0 },
+              },
+              opinions: [
+                {
+                  opinion: "Processing failed",
+                  count: 1,
+                },
+              ],
+            },
+          },
+        };
+      }
+
+      // 7. Prepare chart data (extract from analysis for frontend rendering)
+      const chartData = {
+        sentimentPie:
+          analysis.sentiments && analysis.sentiments.percentages
+            ? [
+                {
+                  name: "Positive",
+                  value: analysis.sentiments.percentages.positive || 0,
+                },
+                {
+                  name: "Negative",
+                  value: analysis.sentiments.percentages.negative || 0,
+                },
+                {
+                  name: "Neutral",
+                  value: analysis.sentiments.percentages.neutral || 0,
+                },
+              ].filter(
+                (item: { name: string; value: number }) => item.value > 0
+              ) // Only include non-zero values
+            : [],
+        opinionBar:
+          analysis.opinions && Array.isArray(analysis.opinions)
+            ? analysis.opinions
+                .map((op: any) => ({
+                  name:
+                    op.opinion && op.opinion.length > 30
+                      ? op.opinion.substring(0, 30) + "..."
+                      : op.opinion || "Unknown",
+                  fullName: op.opinion || "Unknown", // Keep full name for tooltip
+                  value: op.count || 0,
+                }))
+                .filter(
+                  (item: { name: string; value: number; fullName: string }) =>
+                    item.value > 0
+                )
+                .slice(0, 8) // Limit to top 8 opinions for readability
+            : [],
+      };
+
+      console.log("Chart data prepared:", {
+        sentimentPieCount: chartData.sentimentPie.length,
+        opinionBarCount: chartData.opinionBar.length,
+        analysisOpinionsCount: analysis.opinions?.length || 0,
+        firstOpinion: analysis.opinions?.[0],
       });
 
-      analysis = result.object;
-      console.log("Successfully generated structured analysis");
-      console.log("Analysis opinions count:", analysis.opinions?.length || 0);
-      console.log("Analysis sentiments:", analysis.sentiments);
-      console.log("First opinion example:", analysis.opinions?.[0]);
-    } catch (err) {
-      console.error("Analysis generation error:", err);
-      analysis = {
-        opinions: [],
-        sentiments: {
-          positive: 0,
-          negative: 0,
-          neutral: 0,
-          total: 0,
-          percentages: { positive: 0, negative: 0, neutral: 0 },
-        },
-        biases: "Analysis generation failed",
-        subredditAnalysis: {},
+      console.log("🎯 Preparing final response...");
+      const response = {
+        summary,
+        analysis,
+        chartData,
+        sources: posts,
       };
+      console.log("✅ Response prepared successfully");
+
+      return NextResponse.json(response);
+    } catch (error) {
+      console.error("API Error:", error);
+      return NextResponse.json(
+        { error: "Failed to generate response." },
+        { status: 500 }
+      );
     }
+  };
 
-    // 7. Prepare chart data (extract from analysis for frontend rendering)
-    const chartData = {
-      sentimentPie:
-        analysis.sentiments && analysis.sentiments.percentages
-          ? [
-              {
-                name: "Positive",
-                value: analysis.sentiments.percentages.positive || 0,
-              },
-              {
-                name: "Negative",
-                value: analysis.sentiments.percentages.negative || 0,
-              },
-              {
-                name: "Neutral",
-                value: analysis.sentiments.percentages.neutral || 0,
-              },
-            ].filter((item: { name: string; value: number }) => item.value > 0) // Only include non-zero values
-          : [],
-      opinionBar:
-        analysis.opinions && Array.isArray(analysis.opinions)
-          ? analysis.opinions
-              .map((op: any) => ({
-                name:
-                  op.opinion && op.opinion.length > 30
-                    ? op.opinion.substring(0, 30) + "..."
-                    : op.opinion || "Unknown",
-                fullName: op.opinion || "Unknown", // Keep full name for tooltip
-                value: op.count || 0,
-              }))
-              .filter(
-                (item: { name: string; value: number; fullName: string }) =>
-                  item.value > 0
-              )
-              .slice(0, 8) // Limit to top 8 opinions for readability
-          : [],
-    };
-
-    console.log("Chart data prepared:", {
-      sentimentPieCount: chartData.sentimentPie.length,
-      opinionBarCount: chartData.opinionBar.length,
-      analysisOpinionsCount: analysis.opinions?.length || 0,
-      firstOpinion: analysis.opinions?.[0],
-    });
-
-    return NextResponse.json({
-      summary,
-      analysis,
-      chartData,
-      sources: posts,
-    });
+  try {
+    return await Promise.race([processRequest(), timeout]);
   } catch (error) {
-    console.error("API Error:", error);
+    console.error("Request failed or timed out:", error);
     return NextResponse.json(
-      { error: "Failed to generate response." },
+      {
+        error:
+          error instanceof Error && error.message.includes("timeout")
+            ? "Request timed out. Please try with a simpler query."
+            : "Failed to generate response.",
+      },
       { status: 500 }
     );
   }
