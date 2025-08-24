@@ -7,8 +7,15 @@ export const formatAsListTool = tool({
   Use this when users ask for lists, summaries, or want data presented in list format.`,
   inputSchema: z.object({
     data: z.any().describe("The data to format as a list"),
-    listType: z.enum(["numbered", "bullet", "detailed", "summary", "ranking"]).describe("Type of list formatting"),
-    category: z.enum(["opinions", "subreddits", "insights", "posts", "comments", "general"]).describe("Category of data being formatted"),
+    // Make listType and category optional with sensible defaults so calls that omit them don't fail validation
+    listType: z
+      .enum(["numbered", "bullet", "detailed", "summary", "ranking"])
+      .default("summary")
+      .describe("Type of list formatting"),
+    category: z
+      .enum(["opinions", "subreddits", "insights", "posts", "comments", "general"])
+      .default("general")
+      .describe("Category of data being formatted"),
     maxItems: z.number().min(1).max(50).default(10).describe("Maximum number of items to include"),
     includeDetails: z.boolean().default(true).describe("Whether to include additional details for each item"),
     sortBy: z.enum(["relevance", "score", "count", "alphabetical"]).default("relevance").describe("How to sort the list items"),

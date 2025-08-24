@@ -6,7 +6,13 @@ import WelcomeScreen from "../components/WelcomeScreen";
 import ChatInterface from "../components/ChatInterface";
 
 export default function Home() {
-  const { messages, sendMessage, status, error } = useChat({experimental_throttle: 30});
+  const { messages, sendMessage, status, error } = useChat({
+    experimental_throttle: 30,
+    onFinish: (message) => {
+      // Handle the finished message
+      console.log(message);
+    },
+  });
   const [input, setInput] = useState("");
 
   const isLoading = status === "submitted" || status === "streaming";

@@ -21,21 +21,47 @@ export const redditSearchTool = tool({
   Use this when users ask about Reddit opinions, discussions, experiences, or want to research a topic.`,
   inputSchema: z.object({
     query: z.string().describe("The main topic or question to search for"),
-    subreddits: z.array(z.string()).optional().describe("Specific subreddits to search in (optional)"),
-    excludeTerms: z.array(z.string()).optional().describe("Terms to exclude from search results"),
-    sortBy: z.enum(["relevance", "hot", "top", "new"]).default("relevance").describe("How to sort the results"),
-    timeFilter: z.enum(["all", "year", "month", "week", "day"]).default("all").describe("Time range for posts"),
-    limit: z.number().min(1).max(10).default(5).describe("Number of posts to retrieve (1-10)")
+    subreddits: z
+      .array(z.string())
+      .optional()
+      .describe("Specific subreddits to search in (optional)"),
+    excludeTerms: z
+      .array(z.string())
+      .optional()
+      .describe("Terms to exclude from search results"),
+    sortBy: z
+      .enum(["relevance", "hot", "top", "new"])
+      .default("relevance")
+      .describe("How to sort the results"),
+    timeFilter: z
+      .enum(["all", "year", "month", "week", "day"])
+      .default("all")
+      .describe("Time range for posts"),
+    limit: z
+      .number()
+      .min(1)
+      .max(3)
+      .default(3)
+      .describe("Number of posts to retrieve"),
   }),
-  execute: async ({ query, subreddits = [], excludeTerms = [], sortBy, timeFilter, limit }) => {
+  execute: async ({
+    query,
+    subreddits = [],
+    excludeTerms = [],
+    sortBy,
+    timeFilter,
+    limit,
+  }) => {
     try {
       console.log(`🔍 Searching Reddit for: "${query}"`);
 
       // Determine smart subreddits if none provided
-      const smartSubreddits = subreddits.length > 0 ? subreddits : generateSmartSubreddits(query);
-      
+      const smartSubreddits =
+        subreddits.length > 0 ? subreddits : generateSmartSubreddits(query);
+
       const searchQuery = query;
-      const excludeQuery = excludeTerms.length > 0 ? ` -${excludeTerms.join(" -")}` : "";
+      const excludeQuery =
+        excludeTerms.length > 0 ? ` -${excludeTerms.join(" -")}` : "";
       const fullQuery = searchQuery + excludeQuery;
 
       const searchApproaches: Array<{
@@ -47,8 +73,13 @@ export const redditSearchTool = tool({
         // General Reddit search
         {
           url: "https://www.reddit.com/search.json",
-          params: { q: fullQuery, limit: limit * 2, sort: sortBy, type: "link" },
-          isGeneral: true
+          params: {
+            q: fullQuery,
+            limit: limit * 2,
+            sort: sortBy,
+            type: "link",
+          },
+          isGeneral: true,
         },
         // Subreddit-specific searches
         ...smartSubreddits.map((subreddit: string) => ({
@@ -56,12 +87,15 @@ export const redditSearchTool = tool({
           params: {
             q: searchQuery,
             restrict_sr: "on",
-            limit: Math.max(2, Math.floor(limit / Math.max(smartSubreddits.length, 1))),
+            limit: Math.max(
+              2,
+              Math.floor(limit / Math.max(smartSubreddits.length, 1))
+            ),
             sort: sortBy,
             type: "link",
           },
           isGeneral: false,
-          subreddit
+          subreddit,
         })),
       ];
 
@@ -69,8 +103,12 @@ export const redditSearchTool = tool({
 
       for (const approach of searchApproaches) {
         try {
-          console.log(`📂 Searching ${approach.isGeneral ? 'all Reddit' : `r/${approach.subreddit}`}...`);
-          
+          console.log(
+            `📂 Searching ${
+              approach.isGeneral ? "all Reddit" : `r/${approach.subreddit}`
+            }...`
+          );
+
           const searchResponse = await axios.get(approach.url, {
             params: approach.params,
             headers: {
@@ -80,11 +118,18 @@ export const redditSearchTool = tool({
 
           const posts = searchResponse.data.data.children;
           allPosts.push(...posts);
-          console.log(`✅ Found ${posts.length} posts from ${approach.isGeneral ? 'general search' : `r/${approach.subreddit}`}`);
+          console.log(
+            `✅ Found ${posts.length} posts from ${
+              approach.isGeneral ? "general search" : `r/${approach.subreddit}`
+            }`
+          );
 
           await new Promise((resolve) => setTimeout(resolve, 300));
         } catch (err) {
-          console.error(`⚠️ Error searching ${approach.url}:`, (err as Error).message);
+          console.error(
+            `⚠️ Error searching ${approach.url}:`,
+            (err as Error).message
+          );
         }
       }
 
@@ -97,13 +142,15 @@ export const redditSearchTool = tool({
           index === self.findIndex((p) => p?.data?.id === post?.data?.id)
       );
 
-      console.log(`📊 Found ${uniquePosts.length} unique posts, scoring and ranking...`);
+      console.log(
+        `📊 Found ${uniquePosts.length} unique posts, scoring and ranking...`
+      );
 
       if (uniquePosts.length === 0) {
         return {
           success: false,
           message: "No Reddit posts found for the given query.",
-          posts: []
+          posts: [],
         };
       }
 
@@ -123,7 +170,11 @@ export const redditSearchTool = tool({
           });
 
           // Subreddit relevance
-          if (smartSubreddits.map((s: string) => s.toLowerCase()).includes(subreddit)) {
+          if (
+            smartSubreddits
+              .map((s: string) => s.toLowerCase())
+              .includes(subreddit)
+          ) {
             relevanceScore += 5;
           }
 
@@ -145,38 +196,34 @@ export const redditSearchTool = tool({
         .sort((a, b) => b.relevanceScore - a.relevanceScore)
         .slice(0, limit);
 
-      console.log(`📑 Getting detailed content from top ${scoredPosts.length} posts...`);
+      console.log(
+        `📑 Getting detailed content from top ${scoredPosts.length} posts...`
+      );
 
-      // Fetch detailed post content
-      const detailedPosts = [];
-      let successCount = 0;
-
-      for (const post of scoredPosts) {
-        if (successCount >= limit) break;
-
+      // Fetch detailed post content in parallel
+      const fetchPostDetails = async (post: any) => {
         try {
-          if (!post.data?.permalink) continue;
-
+          if (!post.data?.permalink) return null;
           console.log(`📖 Reading: "${post.data.title.substring(0, 40)}..."`);
-
           const response = await axios.get(
             `https://www.reddit.com${post.data.permalink}.json`,
             {
               headers: {
-                "User-Agent": "RedditDig-App/2.0 (Advanced Reddit Analysis Tool)",
+                "User-Agent":
+                  "RedditDig-App/2.0 (Advanced Reddit Analysis Tool)",
               },
             }
           );
-
-          if (!response.data || !Array.isArray(response.data) || response.data.length < 2) {
-            continue;
+          if (
+            !response.data ||
+            !Array.isArray(response.data) ||
+            response.data.length < 2
+          ) {
+            return null;
           }
-
           const postData = response.data[0]?.data?.children?.[0]?.data;
           const commentsData = response.data[1]?.data?.children || [];
-
-          if (!postData) continue;
-
+          if (!postData) return null;
           // Extract top comments
           const topComments = commentsData
             .slice(0, 5)
@@ -191,16 +238,21 @@ export const redditSearchTool = tool({
               author: comment.data.author,
               body: comment.data.body,
               score: comment.data.score,
-              index: i + 1
+              index: i + 1,
             }));
-
-          const fullContent = `${postData.selftext || "No post body."}\n\nTop Comments:\n${
-            topComments.length > 0 
-              ? topComments.map((c: any) => `Comment ${c.index} (${c.score} points): ${c.body}`).join('\n\n')
+          const fullContent = `${
+            postData.selftext || "No post body."
+          }\n\nTop Comments:\n${
+            topComments.length > 0
+              ? topComments
+                  .map(
+                    (c: any) =>
+                      `Comment ${c.index} (${c.score} points): ${c.body}`
+                  )
+                  .join("\n\n")
               : "No comments available."
           }`;
-
-          detailedPosts.push({
+          return {
             id: postData.id,
             title: postData.title,
             author: postData.author,
@@ -211,19 +263,26 @@ export const redditSearchTool = tool({
             url: `https://www.reddit.com${postData.permalink}`,
             fullContent: fullContent,
             topComments: topComments,
-            relevanceScore: post.relevanceScore
-          });
-
-          successCount++;
-          console.log(`✅ Processed ${successCount}/${limit} posts`);
-
-          await new Promise((resolve) => setTimeout(resolve, 1000 + Math.random() * 500));
+            relevanceScore: post.relevanceScore,
+          };
         } catch (err) {
-          console.error(`⚠️ Failed to fetch post details:`, (err as Error).message);
+          console.error(
+            `⚠️ Failed to fetch post details:`,
+            (err as Error).message
+          );
+          return null;
         }
-      }
+      };
 
-      console.log(`🎉 Successfully retrieved ${detailedPosts.length} detailed Reddit posts!`);
+      // Run all fetches in parallel, limit to 'limit' posts
+      const detailedPostsRaw = await Promise.all(
+        scoredPosts.slice(0, limit).map(fetchPostDetails)
+      );
+      const detailedPosts = detailedPostsRaw.filter(Boolean);
+
+      console.log(
+        `🎉 Successfully retrieved ${detailedPosts.length} detailed Reddit posts!`
+      );
 
       return {
         success: true,
@@ -233,19 +292,19 @@ export const redditSearchTool = tool({
           subreddits: smartSubreddits,
           sortBy,
           timeFilter,
-          excludeTerms
+          excludeTerms,
         },
         posts: detailedPosts,
-        totalFound: uniquePosts.length
+        totalFound: uniquePosts.length,
       };
-
     } catch (error) {
       console.error("Reddit search error:", error);
       return {
         success: false,
         message: `Failed to search Reddit: ${(error as Error).message}`,
-        posts: []
+        posts: [],
       };
+    } finally {
     }
   },
 });
@@ -253,37 +312,99 @@ export const redditSearchTool = tool({
 // Helper function to generate smart subreddits based on query
 function generateSmartSubreddits(query: string): string[] {
   const lowerQuery = query.toLowerCase();
-  
+
   // Tech and programming
-  if (lowerQuery.includes('programming') || lowerQuery.includes('coding') || lowerQuery.includes('javascript') || lowerQuery.includes('python') || lowerQuery.includes('react') || lowerQuery.includes('node')) {
-    return ['programming', 'javascript', 'reactjs', 'node', 'webdev', 'learnprogramming'];
+  if (
+    lowerQuery.includes("programming") ||
+    lowerQuery.includes("coding") ||
+    lowerQuery.includes("javascript") ||
+    lowerQuery.includes("python") ||
+    lowerQuery.includes("react") ||
+    lowerQuery.includes("node")
+  ) {
+    return [
+      "programming",
+      "javascript",
+      "reactjs",
+      "node",
+      "webdev",
+      "learnprogramming",
+    ];
   }
-  
+
   // Gaming
-  if (lowerQuery.includes('game') || lowerQuery.includes('gaming') || lowerQuery.includes('pc') || lowerQuery.includes('console')) {
-    return ['gaming', 'pcgaming', 'Games', 'gamingsuggestions', 'patientgamers'];
+  if (
+    lowerQuery.includes("game") ||
+    lowerQuery.includes("gaming") ||
+    lowerQuery.includes("pc") ||
+    lowerQuery.includes("console")
+  ) {
+    return [
+      "gaming",
+      "pcgaming",
+      "Games",
+      "gamingsuggestions",
+      "patientgamers",
+    ];
   }
-  
+
   // Career and work
-  if (lowerQuery.includes('job') || lowerQuery.includes('career') || lowerQuery.includes('work') || lowerQuery.includes('interview')) {
-    return ['jobs', 'careerguidance', 'cscareerquestions', 'ITCareerQuestions', 'careerchange'];
+  if (
+    lowerQuery.includes("job") ||
+    lowerQuery.includes("career") ||
+    lowerQuery.includes("work") ||
+    lowerQuery.includes("interview")
+  ) {
+    return [
+      "jobs",
+      "careerguidance",
+      "cscareerquestions",
+      "ITCareerQuestions",
+      "careerchange",
+    ];
   }
-  
+
   // Health and fitness
-  if (lowerQuery.includes('fitness') || lowerQuery.includes('health') || lowerQuery.includes('diet') || lowerQuery.includes('workout')) {
-    return ['fitness', 'health', 'loseit', 'gainit', 'nutrition'];
+  if (
+    lowerQuery.includes("fitness") ||
+    lowerQuery.includes("health") ||
+    lowerQuery.includes("diet") ||
+    lowerQuery.includes("workout")
+  ) {
+    return ["fitness", "health", "loseit", "gainit", "nutrition"];
   }
-  
+
   // Relationships and advice
-  if (lowerQuery.includes('relationship') || lowerQuery.includes('dating') || lowerQuery.includes('advice')) {
-    return ['relationship_advice', 'dating_advice', 'relationships', 'dating'];
+  if (
+    lowerQuery.includes("relationship") ||
+    lowerQuery.includes("dating") ||
+    lowerQuery.includes("advice")
+  ) {
+    return ["relationship_advice", "dating_advice", "relationships", "dating"];
   }
-  
+
   // Finance and investing
-  if (lowerQuery.includes('invest') || lowerQuery.includes('money') || lowerQuery.includes('financial') || lowerQuery.includes('crypto')) {
-    return ['investing', 'personalfinance', 'financialindependence', 'stocks', 'CryptoCurrency'];
+  if (
+    lowerQuery.includes("invest") ||
+    lowerQuery.includes("money") ||
+    lowerQuery.includes("financial") ||
+    lowerQuery.includes("crypto")
+  ) {
+    return [
+      "investing",
+      "personalfinance",
+      "financialindependence",
+      "stocks",
+      "CryptoCurrency",
+    ];
   }
-  
+
   // General discussion subreddits
-  return ['AskReddit', 'discussion', 'TrueAskReddit', 'NoStupidQuestions', 'explainlikeimfive'];
+  return [
+    "AskReddit",
+    "discussion",
+    "TrueAskReddit",
+    "NoStupidQuestions",
+    "explainlikeimfive",
+  ];
 }

@@ -36,7 +36,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   isLoading,
   input,
   handleInputChange,
-  handleSubmit,
+  handleSubmit
 }) => {
   // Debug: Log message structure to understand AI SDK v5 format
   // React.useEffect(() => {
@@ -393,7 +393,7 @@ const ToolCallRenderer: React.FC<{
                 Found {result.posts.length} Reddit posts:
               </div>
               <div className="flex overflow-x-auto space-x-3 pb-2">
-                {result.posts.slice(0, 3).map((post: any, idx: number) => (
+                {result.posts.map((post: any, idx: number) => (
                   <div key={idx} className="flex-shrink-0">
                     <SourceCard post={post} />
                   </div>

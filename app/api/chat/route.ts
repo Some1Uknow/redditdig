@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { convertToModelMessages, streamText, stepCountIs } from "ai";
 import { mistral } from "@ai-sdk/mistral";
+import { openai } from "@ai-sdk/openai";
 
 // Import our custom tools
 import { redditSearchTool } from "@/lib/tools/reddit-search-tool";
@@ -26,7 +27,7 @@ export async function POST(request: NextRequest) {
 
     // Create the AI stream with our custom tools
     const result = streamText({
-      model: mistral("ministral-8b-2410"),
+      model: openai("gpt-4o-2024-11-20"),
       messages: convertToModelMessages(messages),
       tools: {
         searchReddit: redditSearchTool,
@@ -38,13 +39,13 @@ export async function POST(request: NextRequest) {
 
 1. **searchReddit**: Search Reddit for posts and discussions about any topic
 2. **analyzeRedditData**: Perform comprehensive analysis of Reddit posts including sentiment analysis, opinion extraction, and community insights
-3. **generateChart**: Create visualization data for charts (pie, bar, line, scatter, area) from analysis results
+3. **generateChart**: Create visualization data for charts (pie, bar, line, scatter, area) from analysis results of the reddit posts.
 4. **formatAsList**: Format data into structured lists (numbered, bullet, detailed, summary, ranking, etc.)
 
 ## Workflow (Always Follow This Sequence):
 1. Use searchReddit to find relevant posts (max 5)
 2. Use analyzeRedditData ONCE on the search results
-3. If user wants visualization, use generateChart ONCE with ALL required parameters
+3. Always use generateChart with ALL required parameters.
 4. If user wants lists, use formatAsList ONCE with ALL required parameters
 
 ## CRITICAL RULES:
@@ -103,7 +104,7 @@ formatAsList with listType: "bullet", category: "opinions", data: analysisResult
 - Be objective about biases and limitations
 `,
       //      maxTokens: 3000,
-      stopWhen: stepCountIs(5), // Reduced from 10 to 5 to prevent redundant calls
+      stopWhen: stepCountIs(10), // Restored to 10 to allow final summary and wrap-up
     });
 
     return result.toUIMessageStreamResponse();
