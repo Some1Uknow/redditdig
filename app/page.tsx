@@ -8,6 +8,16 @@ interface Message {
   role: "user" | "assistant";
   content?: string;
   summary?: string;
+  analysis?: {
+    opinions: { opinion: string; count: number; examples: string[] }[];
+    sentiments: { positive: number; negative: number; neutral: number; total: number; percentages: { positive: number; negative: number; neutral: number } };
+    biases: string;
+    subredditAnalysis: { [key: string]: { summary: string; sentiments: { positive: number; negative: number; neutral: number; total: number; percentages: { positive: number; negative: number; neutral: number } }; opinions: { opinion: string; count: number }[] } };
+  };
+  chartData?: {
+    sentimentPie: { name: string; value: number }[];
+    opinionBar: { name: string; value: number }[];
+  };
   sources?: any[];
 }
 
@@ -39,6 +49,8 @@ export default function Home() {
       const assistantMessage = {
         role: "assistant" as const,
         summary: data.summary,
+        analysis: data.analysis,
+        chartData: data.chartData,
         sources: data.sources,
       };
       setMessages((prev) => [...prev, assistantMessage]);
