@@ -47,7 +47,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
   return (
     <>
-      <main className="flex-1 overflow-y-auto">
+      <main className="flex-1 w-full overflow-y-auto">
         <div className="max-w-4xl mx-auto px-4 py-8">
           <div className="space-y-8">
             {messages.map((message, index) => (

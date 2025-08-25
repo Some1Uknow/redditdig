@@ -25,7 +25,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
   isLoading,
 }) => {
   return (
-    <main className="flex-1 flex flex-col justify-center items-center px-4 py-8">
+    <main className="flex-1 flex flex-col justify-center w-full items-center px-4 py-8">
       <div className="absolute top-4 right-4">
         <ThemeToggle />
       </div>

@@ -4,6 +4,7 @@ import { useChat } from "@ai-sdk/react";
 import { useState } from "react";
 import WelcomeScreen from "../components/WelcomeScreen";
 import ChatInterface from "../components/ChatInterface";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 
 export default function Home() {
   const { messages, sendMessage, status, error } = useChat({
@@ -35,7 +36,8 @@ export default function Home() {
   }
 
   return (
-    <div className="bg-gray-50 min-h-screen flex flex-col">
+    <div className="bg-gray-50 w-full h-full flex flex-col">
+      <SidebarTrigger />
       {messages.length === 0 ? (
         <WelcomeScreen
           input={input}
