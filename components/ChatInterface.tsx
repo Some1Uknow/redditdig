@@ -38,12 +38,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   handleInputChange,
   handleSubmit
 }) => {
-  // Debug: Log message structure to understand AI SDK v5 format
-  // React.useEffect(() => {
-  //   if (messages.length > 0) {
-  //     console.log("📱 Current messages structure:", JSON.stringify(messages, null, 2));
-  //   }
-  // }, [messages]);
 
   return (
     <>

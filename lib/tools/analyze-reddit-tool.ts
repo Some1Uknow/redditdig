@@ -3,6 +3,7 @@ import { z } from "zod";
 import { generateObject } from "ai";
 import { mistral } from "@ai-sdk/mistral";
 import { openai } from "@ai-sdk/openai";
+//import { groq } from "@ai-sdk/groq";
 
 const AnalysisSchema = z.object({
   opinions: z
@@ -27,48 +28,82 @@ const AnalysisSchema = z.object({
       })
     )
     .describe("Key distinct opinions found in the Reddit data"),
-  sentiments: z.object({
-    positive: z.number().describe("Count of positive posts/comments").optional(),
-    negative: z.number().describe("Count of negative posts/comments").optional(),
-    neutral: z.number().describe("Count of neutral posts/comments").optional(),
-    total: z.number().describe("Total posts/comments analyzed").optional(),
-    percentages: z.object({
-      positive: z.number().describe("Percentage of positive sentiment").optional(),
-      negative: z.number().describe("Percentage of negative sentiment").optional(),
-      neutral: z.number().describe("Percentage of neutral sentiment").optional(),
-    }).optional(),
-  }).optional(),
+  sentiments: z
+    .object({
+      positive: z
+        .number()
+        .describe("Count of positive posts/comments")
+        .optional(),
+      negative: z
+        .number()
+        .describe("Count of negative posts/comments")
+        .optional(),
+      neutral: z
+        .number()
+        .describe("Count of neutral posts/comments")
+        .optional(),
+      total: z.number().describe("Total posts/comments analyzed").optional(),
+      percentages: z
+        .object({
+          positive: z
+            .number()
+            .describe("Percentage of positive sentiment")
+            .optional(),
+          negative: z
+            .number()
+            .describe("Percentage of negative sentiment")
+            .optional(),
+          neutral: z
+            .number()
+            .describe("Percentage of neutral sentiment")
+            .optional(),
+        })
+        .optional(),
+    })
+    .optional(),
   keyInsights: z
     .array(z.string())
     .describe("Top 3-5 key insights from the analysis")
     .optional(),
-  biases: z.string().describe("Detected biases in the community discussions").optional(),
+  biases: z
+    .string()
+    .describe("Detected biases in the community discussions")
+    .optional(),
   subredditAnalysis: z
     .record(
       z.object({
-        summary: z.string().describe("Summary of this subreddit's perspective").optional(),
-        sentiments: z.object({
-          positive: z.number().optional(),
-          negative: z.number().optional(),
-          neutral: z.number().optional(),
-          total: z.number().optional(),
-          percentages: z.object({
+        summary: z
+          .string()
+          .describe("Summary of this subreddit's perspective")
+          .optional(),
+        sentiments: z
+          .object({
             positive: z.number().optional(),
             negative: z.number().optional(),
             neutral: z.number().optional(),
-          }).optional(),
-        }).optional(),
-        dominantOpinions: z.array(
-          z.object({
-            opinion: z.string().optional(),
-            strength: z
-              .number()
-              .min(1)
-              .max(5)
-              .describe("How strongly this opinion is held (1-5)")
+            total: z.number().optional(),
+            percentages: z
+              .object({
+                positive: z.number().optional(),
+                negative: z.number().optional(),
+                neutral: z.number().optional(),
+              })
               .optional(),
           })
-        ).optional(),
+          .optional(),
+        dominantOpinions: z
+          .array(
+            z.object({
+              opinion: z.string().optional(),
+              strength: z
+                .number()
+                .min(1)
+                .max(5)
+                .describe("How strongly this opinion is held (1-5)")
+                .optional(),
+            })
+          )
+          .optional(),
       })
     )
     .describe("Analysis broken down by subreddit communities")
@@ -222,7 +257,8 @@ Be specific, cite examples, and ensure opinions are substantial and distinct.`;
           }
 
           const result = await generateObject({
-            model: openai("gpt-4o-2024-11-20"),
+            //   model: groq("qwen/qwen3-32b"),
+            model: mistral("open-mixtral-8x22b"),       
             schema: AnalysisSchema,
             prompt: analysisPrompt,
           });
@@ -269,11 +305,14 @@ Be specific, cite examples, and ensure opinions are substantial and distinct.`;
                 ] as const;
                 for (const key of sentimentKeys) {
                   const k = key as keyof typeof prev.sentiments;
-                  if (k in prev.sentiments && subAnalysis.sentiments && k in subAnalysis.sentiments) {
+                  if (
+                    k in prev.sentiments &&
+                    subAnalysis.sentiments &&
+                    k in subAnalysis.sentiments
+                  ) {
                     // Type assertions are safe here because keys are restricted above
-                    (prev.sentiments as any)[k] += (
-                      subAnalysis.sentiments as any
-                    )[k] || 0;
+                    (prev.sentiments as any)[k] +=
+                      (subAnalysis.sentiments as any)[k] || 0;
                   }
                 }
                 if (subAnalysis.dominantOpinions) {
@@ -291,9 +330,7 @@ Be specific, cite examples, and ensure opinions are substantial and distinct.`;
           );
         }
       } catch (analysisError) {
-        console.error(
-          "⚠️ Detailed batch analysis failed"
-        );
+        console.error("⚠️ Detailed batch analysis failed");
         // Don't set analysisSucceeded = false, let the outer try/catch handle it
         throw analysisError;
       }

@@ -40,8 +40,8 @@ export const redditSearchTool = tool({
     limit: z
       .number()
       .min(1)
-      .max(2)
-      .default(2)
+      .max(3)
+      .default(3)
       .describe("Number of posts to retrieve"),
   }),
   execute: async ({
@@ -234,13 +234,12 @@ export const redditSearchTool = tool({
                 comment.data.body !== "[removed]" &&
                 comment.data.body.length > 10
             )
-            .map((comment: any, i: number) => ({
+            .map((comment: any) => ({
               author: comment.data.author,
               body: comment.data.body.length > 300 
                 ? comment.data.body.substring(0, 300) + "..."
                 : comment.data.body,
               score: comment.data.score,
-              index: i + 1,
             }));
           // Truncate post content for token efficiency
           const truncatedSelftext = postData.selftext && postData.selftext.length > 800
@@ -251,8 +250,8 @@ export const redditSearchTool = tool({
             topComments.length > 0
               ? topComments
                   .map(
-                    (c: any) =>
-                      `Comment ${c.index} (${c.score} points): ${c.body}`
+                    (c: any, index: number) =>
+                      `Comment ${index + 1} (${c.score} points): ${c.body}`
                   )
                   .join("\n\n")
               : "No comments available."

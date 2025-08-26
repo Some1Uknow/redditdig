@@ -1,13 +1,13 @@
 import { NextRequest } from "next/server";
 import { convertToModelMessages, streamText, stepCountIs } from "ai";
-import { mistral } from "@ai-sdk/mistral";
-import { openai } from "@ai-sdk/openai";
+// import { mistral } from "@ai-sdk/mistral";
+// import { openai } from "@ai-sdk/openai";
+import { groq } from "@ai-sdk/groq";
 
 // Import our custom tools
 import { redditSearchTool } from "@/lib/tools/reddit-search-tool";
 import { analyzeRedditDataTool } from "@/lib/tools/analyze-reddit-tool";
 import { generateChartTool } from "@/lib/tools/generate-chart-tool";
-import { formatAsListTool } from "@/lib/tools/format-list-tool";
 import { prepareForVisualizationTool } from "@/lib/tools/prepare-for-visualization-tool";
 
 export const maxDuration = 60;
@@ -28,13 +28,13 @@ export async function POST(request: NextRequest) {
 
     // Create the AI stream with our custom tools
     const result = streamText({
-      model: openai("gpt-4o-2024-11-20"),
+      //   model: openai("gpt-4o-2024-11-20"),
+      model: groq("moonshotai/kimi-k2-instruct"),
       messages: convertToModelMessages(messages),
       tools: {
         searchReddit: redditSearchTool,
         analyzeRedditData: analyzeRedditDataTool,
         generateChart: generateChartTool,
-        formatAsList: formatAsListTool,
         prepareForVisualization: prepareForVisualizationTool,
       },
       system: `You are RedditDig, an AI assistant specialized in Reddit research and analysis. You have access to tools that let you:
@@ -43,14 +43,12 @@ export async function POST(request: NextRequest) {
 2. **analyzeRedditData**: Analyze posts for sentiment, opinions, and insights (focus on high-quality analysis)
 3. **prepareForVisualization**: Prepare analysis data for visualization by ensuring proper structure and format
 4. **generateChart**: Create visualizations from analysis summaries (opinions, sentiments, subreddit analysis)
-5. **formatAsList**: Format data into structured lists
 
 ## Workflow:
-1. Use searchReddit to find relevant posts (max 2)
+1. Use searchReddit to find relevant posts (max 3)
 2. Use analyzeRedditData ONCE on the results (focus on high-quality analysis)
 3. If data structure is not correct for visualization, use prepareForVisualization to fix it
 4. Use generateChart with ALL required parameters (directly from analysis summaries)
-5. Use formatAsList ONCE if user wants lists
 
 ## Critical Rules:
 - NEVER call generateChart before analyzeRedditData
@@ -58,7 +56,7 @@ export async function POST(request: NextRequest) {
 - If generateChart fails due to data structure issues, use prepareForVisualization first
 - ALWAYS provide ALL required parameters for each tool
 - Always explain what you're doing at each step
-- Always provide a final summary after all tools complete
+- Always provide a final summary about the query after all tools complete
 
 ## Rules:
 - NEVER call the same tool multiple times unless requested
@@ -89,17 +87,12 @@ export async function POST(request: NextRequest) {
 - Calculate percentages as (opinion count / total opinion count) * 100
 - Display percentages in the chart and tooltips
 
-### formatAsList
-- listType: "numbered", "bullet", "detailed", "summary", "ranking"
-- category: "opinions", "subreddits", "insights", "posts", "comments", "general"
-- data: analysis results
-
 ## Final Summary:
 - After all tools complete, provide a summary explaining findings and insights
 - The summary should be conversational and appear after all tool outputs
 `,
-      //      maxTokens: 3000,
-      stopWhen: stepCountIs(10), // Restored to 10 to allow final summary and wrap-up
+
+      stopWhen: stepCountIs(10),
     });
 
     return result.toUIMessageStreamResponse();
